@@ -1,4 +1,4 @@
-.PHONY: help install preview render clean
+.PHONY: help install doctor preview render clean
 
 .DEFAULT_GOAL := help
 
@@ -8,6 +8,11 @@ help: ## Show available targets
 
 install: ## Install Python dependencies
 	pip install -r requirements.txt
+
+doctor: ## Verify Quarto installation (install, versions, info)
+	quarto check install
+	quarto check versions
+	quarto check info
 
 preview: ## Open live-reload preview in browser
 	quarto preview itinerary.qmd
