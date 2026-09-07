@@ -1,0 +1,15 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Puerto Rico Road Trip"
+  navbar:
+    left:
+      - href: itinerary.qmd
+        text: Itinerary
+
+format:
+  html:
+    theme: cosmo
+    toc: true

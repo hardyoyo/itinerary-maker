@@ -1,0 +1,92 @@
+---
+title: "Puerto Rico Road Trip"
+format: html
+---
+
+```{python}
+#| echo: false
+#| warning: false
+import yaml
+from pathlib import Path
+
+data = yaml.safe_load(Path("itinerary.yml").read_text())
+trip = data["trip"]
+stops = data["stops"]
+```
+
+## `r trip["name"]`
+
+*r `trip["description"]`*
+
+---
+
+```{python}
+#| echo: false
+#| warning: false
+from IPython.display import display, HTML
+
+rows = ""
+for s in stops:
+    activities = "<br>".join(f"• {a}" for a in s["activities"])
+    rows += f"""
+    <tr>
+      <td><strong>{s['date']}</strong></td>
+      <td>{s['location']}</td>
+      <td>{s['accommodation']}</td>
+      <td>{s['transport']['mode']}<br><em>{s['transport']['notes']}</em></td>
+      <td>{activities}</td>
+    </tr>"""
+
+html_table = f"""
+<style>
+  .itinerary-table {{ width:100%; border-collapse:collapse; font-size:0.9em; }}
+  .itinerary-table th {{ background:#2c3e50; color:white; padding:10px; text-align:left; }}
+  .itinerary-table td {{ padding:10px; border-bottom:1px solid #ddd; vertical-align:top; }}
+  .itinerary-table tr:hover {{ background:#f5f5f5; }}
+</style>
+<table class="itinerary-table">
+  <thead>
+    <tr>
+      <th>Date</th><th>Location</th><th>Accommodation</th><th>Transport</th><th>Activities</th>
+    </tr>
+  </thead>
+  <tbody>{rows}</tbody>
+</table>
+"""
+display(HTML(html_table))
+```
+
+---
+
+## Route Map
+
+```{python}
+#| echo: false
+#| warning: false
+import folium
+
+center_lat = sum(s["lat"] for s in stops) / len(stops)
+center_lon = sum(s["lon"] for s in stops) / len(stops)
+
+m = folium.Map(location=[center_lat, center_lon], zoom_start=9, tiles="CartoDB positron")
+
+for i, s in enumerate(stops, 1):
+    popup_html = f"""
+    <b>Day {i} — {s['location']}</b><br>
+    {s['date']}<br>
+    <i>{s['accommodation']}</i>
+    """
+    folium.Marker(
+        location=[s["lat"], s["lon"]],
+        popup=popup_html,
+        tooltip=f"{s['location']}",
+        icon=folium.Icon(color="blue", icon="road", prefix="fa"),
+    ).add_to(m)
+
+folium.PolyLine(
+    [[s["lat"], s["lon"]] for s in stops],
+    color="#2c3e50", weight=2, dash_array="10",
+).add_to(m)
+
+m
+```

@@ -1,0 +1,95 @@
+trip:
+  name: "Puerto Rico Road Trip"
+  description: "A week-long loop around the island"
+
+stops:
+  - date: "2026-03-14"
+    location: "San Juan"
+    accommodation: "Hotel El Convento, Old San Juan"
+    transport:
+      mode: "Rental car pickup at SJU Airport"
+      notes: "Pick up at 10 AM, return in San Juan on final day"
+    activities:
+      - "Walk the blue cobblestones of Old San Juan"
+      - "Visit Castillo San Felipe del Morro"
+      - "Dinner at La Fabrica de Helados"
+    lat: 18.4655
+    lon: -66.1057
+
+  - date: "2026-03-15"
+    location: "El Yunque National Forest"
+    accommodation: "Rainforest Inn, Rio Grande"
+    transport:
+      mode: "Drive"
+      notes: "45 min east from San Juan via PR-66"
+    activities:
+      - "Hike La Mina Trail to the waterfall"
+      - "Swim at Juan Diego Creek"
+      - "Visit Yokahú Tower for canopy views"
+    lat: 18.3186
+    lon: -65.7886
+
+  - date: "2026-03-16"
+    location: "Fajardo"
+    accommodation: "El Conquistador Resort"
+    transport:
+      mode: "Drive"
+      notes: "20 min east along the coast"
+    activities:
+      - "Bioluminescent bay kayak tour at dusk"
+      - "Visit Cabezas de San Nature Reserve"
+      - "Relax at Playa Seven Seas"
+    lat: 18.3402
+    lon: -65.6549
+
+  - date: "2026-03-17"
+    location: "Culebra"
+    accommodation: "Club Seabourne, Culebra"
+    transport:
+      mode: "Ferry from Fajardo"
+      notes: "1 hour ferry; book tickets in advance"
+    activities:
+      - "Snorkel at Playa Tamarindo"
+      - "Beach day at Playa Flamenco"
+      - "Explore the small town of Dewey"
+    lat: 18.3030
+    lon: -65.2963
+
+  - date: "2026-03-18"
+    location: "Ponce"
+    accommodation: "Ponce Plaza Hotel & Casino"
+    transport:
+      mode: "Drive"
+      notes: "Return ferry, then 2.5 h drive south via PR-52"
+    activities:
+      - "Museo de Arte de Ponce"
+      - "Walk the Parque de Bombas"
+      - "Old Town plazas and cathedral"
+    lat: 18.0111
+    lon: -66.6141
+
+  - date: "2026-03-19"
+    location: "Rincón"
+    accommodation: "The English Rose Inn"
+    transport:
+      mode: "Drive"
+      notes: "1.5 h west along the coast via PR-2 and PR-116"
+    activities:
+      - "Surf lesson at Domes Beach"
+      - "Watch the sunset from Rincón Lighthouse"
+      - "Fresh seafood at Tamboo Beside the Pointe"
+    lat: 18.3408
+    lon: -67.2501
+
+  - date: "2026-03-20"
+    location: "San Juan (return)"
+    accommodation: "Same-day flight out"
+    transport:
+      mode: "Drive"
+      notes: "2 h back to SJU airport via PR-22; return rental car"
+    activities:
+      - "Last walk along Paseo de la Princesa"
+      - "Pick up souvenirs in Old San Juan"
+      - "Return rental car at SJU"
+    lat: 18.4655
+    lon: -66.1057
