@@ -1,4 +1,4 @@
-.PHONY: help install doctor preview render pdf clean
+.PHONY: help install doctor preview render pdf clean clean-cache
 
 .DEFAULT_GOAL := help
 
@@ -23,5 +23,8 @@ render: ## Render itinerary to static HTML in _site/
 pdf: ## Render itinerary to PDF in _site/
 	quarto render itinerary.qmd --to pdf
 
-clean: ## Remove generated output
+clean: clean-cache ## Remove generated output and the Quarto project cache
 	rm -rf _site
+
+clean-cache: ## Remove the Quarto project cache
+	rm -rf .quarto/project-cache
