@@ -1,4 +1,4 @@
-.PHONY: help install doctor preview render clean
+.PHONY: help install doctor preview render pdf clean
 
 .DEFAULT_GOAL := help
 
@@ -19,6 +19,9 @@ preview: ## Open live-reload preview in browser
 
 render: ## Render itinerary to static HTML in _site/
 	quarto render itinerary.qmd
+
+pdf: ## Render itinerary to PDF in _site/
+	quarto render itinerary.qmd --to pdf
 
 clean: ## Remove generated output
 	rm -rf _site

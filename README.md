@@ -1,6 +1,6 @@
 # Itinerary Maker
 
-A Quarto project that generates a styled, multi-page travel itinerary from a YAML data file, with an interactive Folium map.
+A Quarto project that generates a styled, multi-page travel itinerary from a YAML data file, with an interactive Folium map on the web and a static route map embedded in the PDF.
 
 ## Project Structure
 
@@ -36,6 +36,7 @@ Run `make help` to list available commands. Common workflows:
 | `make install` | Install Python dependencies                       |
 | `make preview` | Open live-reload preview in the browser           |
 | `make render`  | Render itinerary to static HTML in `_site/`       |
+| `make pdf`     | Render itinerary to PDF in `_site/`               |
 | `make clean`   | Remove generated output                           |
 
 Or call the tools directly:

@@ -1,5 +1,5 @@
 ---
-title: "Puerto Rico Road Trip"
+title: "Puerto Rico Vacation 2026"
 format: html
 ---
 
@@ -14,9 +14,7 @@ trip = data["trip"]
 stops = data["stops"]
 ```
 
-## `r trip["name"]`
-
-*r `trip["description"]`*
+*`{python} trip["description"]`*
 
 ---
 
@@ -63,30 +61,132 @@ display(HTML(html_table))
 ```{python}
 #| echo: false
 #| warning: false
+#| error: false
+# Always generate a static snapshot of the route; used as the PDF image
+# (the HTML output gets an interactive Folium map instead).
+import math
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+from staticmap import StaticMap, CircleMarker, Line
+
+map_img = "route-map.png"
+
+def _lon_to_x(lon, zoom):
+    return (lon + 180.0) / 360.0 * 2**zoom
+
+def _lat_to_y(lat, zoom):
+    lat = max(min(lat, 90), -90)
+    r = math.radians(lat)
+    return (1.0 - math.log(math.tan(r) + 1 / math.cos(r)) / math.pi) / 2.0 * 2**zoom
+
+m = StaticMap(900, 560, padding_x=40, padding_y=40)
+
+coords = [[s["lon"], s["lat"]] for s in stops]
+m.add_line(Line(coords, "#000000", 1))
+
+for s in reversed(stops):
+    for color, r in (("#000000", 14),):
+        m.add_marker(CircleMarker((s["lon"], s["lat"]), color, r))
+
+# auto-fit zoom + centre so every stop is visible
+img = m.render()
+
+# Draw the day number on each marker. Positions replicate staticmap's
+# own Web-Mercator projection so the labels land exactly on the markers.
+draw = ImageDraw.Draw(img)
+try:
+    font = ImageFont.truetype("OpenSans-Bold.ttf", 16)
+except OSError:
+    font = ImageFont.load_default()
+
+for i, s in list(enumerate(stops, 1))[::-1]:
+    px = m._x_to_px(_lon_to_x(s["lon"], m.zoom))
+    py = m._y_to_px(_lat_to_y(s["lat"], m.zoom))
+    tx = str(i)
+    bbox = draw.textbbox((0, 0), tx, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text((px - tw / 2 - bbox[0], py - th / 2 - bbox[1]), tx, fill="white", font=font)
+
+img.save(map_img, format="PNG")
+```
+
+::: {.content-visible when-format="pdf"}
+![Route map with numbered stops](route-map.png){width=100%}
+:::
+
+```{python}
+#| echo: false
+#| warning: false
+#| error: false
+from IPython.display import display as _display
+import os
 import folium
 
 center_lat = sum(s["lat"] for s in stops) / len(stops)
 center_lon = sum(s["lon"] for s in stops) / len(stops)
 
-m = folium.Map(location=[center_lat, center_lon], zoom_start=9, tiles="CartoDB positron")
+m = folium.Map(location=[center_lat, center_lon], zoom_start=9)
 
-for i, s in enumerate(stops, 1):
+_carto_key = os.environ.get("CARTOKEY", "").strip()
+_carto_style = "voyager"
+_carto_base = "https://basemaps.cartocdn.com/rastertiles/" + _carto_style + "/{z}/{x}/{y}.png"
+if _carto_key:
+    _carto_url = _carto_base + "?key=" + _carto_key
+else:
+    _carto_url = _carto_base
+
+folium.TileLayer(
+    tiles=_carto_url,
+    name="Positron",
+    attr="&copy; OpenStreetMap contributors &copy; CARTO",
+).add_to(m)
+
+def _numbered_marker(i, s):
     popup_html = f"""
     <b>Day {i} — {s['location']}</b><br>
     {s['date']}<br>
     <i>{s['accommodation']}</i>
     """
-    folium.Marker(
+    return folium.Marker(
         location=[s["lat"], s["lon"]],
         popup=popup_html,
         tooltip=f"{s['location']}",
-        icon=folium.Icon(color="blue", icon="road", prefix="fa"),
-    ).add_to(m)
+        icon=folium.DivIcon(
+            html=f'<div style="background:#000;color:#fff;font-family:Open Sans,sans-serif;'
+                 f'font-weight:bold;width:24px;height:24px;border-radius:50%;'
+                 f'display:flex;align-items:center;justify-content:center;'
+                 f'font-size:14px;">{i}</div>',
+            icon_size=(24, 24),
+            icon_anchor=(12, 12),
+        ),
+    )
+
+for i, s in enumerate(stops, 1):
+    _numbered_marker(i, s).add_to(m)
+
+# stops 1 and 7 share the same location; re-add marker 1 last so it wins the overlap
+if stops and stops[0]["lon"] == stops[-1]["lon"] and stops[0]["lat"] == stops[-1]["lat"]:
+    _numbered_marker(1, stops[0]).add_to(m)
 
 folium.PolyLine(
     [[s["lat"], s["lon"]] for s in stops],
     color="#2c3e50", weight=2, dash_array="10",
 ).add_to(m)
 
-m
+# Only the HTML output shows the interactive map; other formats use the
+# static PNG generated above, so suppress Folium output here for them.
+import json
+def _target_format():
+    info_path = __import__("os").environ.get("QUARTO_EXECUTE_INFO")
+    if info_path:
+        try:
+            return json.load(open(info_path))["format"]["pandoc"]["to"]
+        except Exception:
+            return None
+    return None
+
+if _target_format() in (None, "html"):
+    _display(m)
+else:
+    _ = None
 ```

@@ -11,5 +11,17 @@ website:
 
 format:
   html:
-    theme: cosmo
+    theme:
+      - cosmo
+      - variables.scss
     toc: true
+  pdf:
+    documentclass: article
+    geometry:
+      - top=1in
+      - bottom=1in
+      - left=1in
+      - right=1in
+    number-sections: false
+    fontsize: 11pt
+    mainfont: Lato
