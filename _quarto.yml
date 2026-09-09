@@ -1,9 +1,12 @@
 project:
   type: website
   output-dir: _site
+  pre-render: ./scripts/pre-render.py
+
+metadata-files:
+  - _generated-metadata.yml
 
 website:
-  title: "Puerto Rico Road Trip"
   navbar:
     left:
       - href: itinerary.qmd

@@ -1,15 +1,15 @@
 ---
-title: "Puerto Rico Vacation 2026"
 format: html
 ---
 
 ```{python}
 #| echo: false
 #| warning: false
+import os
 import yaml
 from pathlib import Path
 
-data = yaml.safe_load(Path("itinerary.yml").read_text())
+data = yaml.safe_load(Path(os.environ.get("ITINERARY_DATA", "itinerary.yml")).read_text())
 trip = data["trip"]
 stops = data["stops"]
 ```
