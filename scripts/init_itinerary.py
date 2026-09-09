@@ -120,6 +120,23 @@ def ask_list(label, existing=None):
         n += 1
 
 
+def ask_resources(existing=None):
+    """Ask for stop resources (name/url/optional image map); blank name ends."""
+    existing = list(existing) if existing else []
+    resources = []
+    n = 1
+    while True:
+        current = existing[n - 1] if n <= len(existing) else {}
+        print(f"  Resource {n} (leave name blank to finish)")
+        name = prompt("    Name", current.get("name", ""))
+        if not name:
+            return resources
+        url = prompt("    Link URL", current.get("url", ""))
+        image = prompt("    Map/image URL", current.get("image", ""))
+        resources.append({"name": name, "url": url, "image": image})
+        n += 1
+
+
 def ask_coordinates(location, default_lat=None, default_lon=None, do_geocode=True):
     lat, lon = default_lat, default_lon
     if (lat is None or lon is None) and do_geocode:
@@ -178,23 +195,25 @@ def main():
         transport_mode = ask_required("Transport mode", transport.get("mode"))
         transport_notes = prompt("Transport notes", transport.get("notes", ""))
         activities = ask_list("Activity", current.get("activities") if current else None)
+        resources = ask_resources(current.get("resources") if current else None)
         lat, lon = ask_coordinates(
             location,
             current.get("lat") if current else None,
             current.get("lon") if current else None,
             do_geocode=not args.no_geocode,
         )
-        completed.append(
-            {
-                "date": date,
-                "location": location,
-                "accommodation": accommodation,
-                "transport": {"mode": transport_mode, "notes": transport_notes},
-                "activities": activities,
-                "lat": lat,
-                "lon": lon,
-            }
-        )
+        stop = {
+            "date": date,
+            "location": location,
+            "accommodation": accommodation,
+            "transport": {"mode": transport_mode, "notes": transport_notes},
+            "activities": activities,
+            "lat": lat,
+            "lon": lon,
+        }
+        if resources:
+            stop["resources"] = resources
+        completed.append(stop)
         print()
         n += 1
 

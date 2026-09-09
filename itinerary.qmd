@@ -16,12 +16,21 @@ stops = data["stops"]
 
 *`{python} trip["description"]`*
 
----
-
 ```{python}
 #| echo: false
 #| warning: false
 from IPython.display import display, HTML
+import html as _html
+
+def _resources_html(s):
+    items = []
+    for r in s.get("resources", []):
+        name = _html.escape(str(r["name"]))
+        if r.get("url"):
+            items.append(f'<a href="{_html.escape(str(r["url"]))}" target="_blank">{name}</a>')
+        else:
+            items.append(name)
+    return "<br>".join(items)
 
 rows = ""
 for s in stops:
@@ -33,6 +42,7 @@ for s in stops:
       <td>{s['accommodation']}</td>
       <td>{s['transport']['mode']}<br><em>{s['transport']['notes']}</em></td>
       <td>{activities}</td>
+      <td>{_resources_html(s)}</td>
     </tr>"""
 
 html_table = f"""
@@ -45,7 +55,7 @@ html_table = f"""
 <table class="itinerary-table">
   <thead>
     <tr>
-      <th>Date</th><th>Location</th><th>Accommodation</th><th>Transport</th><th>Activities</th>
+      <th>Date</th><th>Location</th><th>Accommodation</th><th>Transport</th><th>Activities</th><th>Resources</th>
     </tr>
   </thead>
   <tbody>{rows}</tbody>
@@ -88,8 +98,18 @@ for s in reversed(stops):
     for color, r in (("#000000", 14),):
         m.add_marker(CircleMarker((s["lon"], s["lat"]), color, r))
 
-# auto-fit zoom + centre so every stop is visible
-img = m.render()
+# Auto-fit to the tightest zoom that shows every stop. A trip-level `zoom`
+# acts as a ceiling on that, so a single-location trip (e.g. one campsite)
+# still shows the surrounding roads instead of zooming all the way in.
+try:
+    trip_zoom = int(trip["zoom"]) if trip.get("zoom") else None
+except (TypeError, ValueError):
+    trip_zoom = None
+
+if trip_zoom is not None:
+    img = m.render(zoom=min(m._calculate_zoom(), trip_zoom))
+else:
+    img = m.render()
 
 # Draw the day number on each marker. Positions replicate staticmap's
 # own Web-Mercator projection so the labels land exactly on the markers.
@@ -125,7 +145,11 @@ import folium
 center_lat = sum(s["lat"] for s in stops) / len(stops)
 center_lon = sum(s["lon"] for s in stops) / len(stops)
 
-m = folium.Map(location=[center_lat, center_lon], zoom_start=9)
+try:
+    _zoom_start = int(trip.get("zoom") or 9)
+except (TypeError, ValueError):
+    _zoom_start = 9
+m = folium.Map(location=[center_lat, center_lon], zoom_start=_zoom_start)
 
 _carto_key = os.environ.get("CARTOKEY", "").strip()
 _carto_style = "voyager"
@@ -189,4 +213,23 @@ if _target_format() in (None, "html"):
     _display(m)
 else:
     _ = None
+```
+
+---
+
+```{python}
+#| echo: false
+#| warning: false
+#| output: asis
+from pathlib import Path
+from IPython.display import Markdown
+
+# The pre-render script builds this markdown (campground maps + optional
+# sky map) after fetching external assets, so we emit it as-is here instead
+# of using an include shortcode (which Quarto resolves before pre-render runs).
+_resources_path = Path("_generated-resources.md")
+_resources_md = (
+    _resources_path.read_text(encoding="utf-8") if _resources_path.exists() else ""
+)
+Markdown(_resources_md)
 ```

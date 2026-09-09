@@ -1,30 +1,95 @@
 #!/usr/bin/env python3
-"""Generate document metadata from the itinerary data file before rendering.
+"""Generate document metadata and resource image assets before rendering.
 
-Quarto project pre-render script: reads the trip name out of the itinerary
-data file (ITINERARY_DATA, defaulting to itinerary.yml) and writes
-_generated-metadata.yml, which supplies the document and website title so they
-are never hardcoded.
+Quarto project pre-render script. Reads the itinerary data file
+(ITINERARY_DATA, defaulting to itinerary.yml) and writes:
+
+* _generated-metadata.yml — the trip name, so the document/website titles are
+  never hardcoded.
+* resource-images/ — one file per stop resource that carries an `image` URL,
+  fetched up front so pictures render in both the HTML and PDF output without
+  a live network connection at render time.
+* _generated-resources.md — markdown that embeds those images; the document
+  emits it from a code cell so it is appended at the end in both HTML and PDF.
+  If this month's sky map has been fetched (e.g. `make skymap`), a page
+  embedding that PDF is appended to the same file so it lands in the
+  resources section of the rendered document.
 """
 
 import os
+import re
+import time
+import urllib.request
 from pathlib import Path
 
 import yaml
 
 DATA_FILE = Path(os.environ.get("ITINERARY_DATA", "itinerary.yml"))
 OUTPUT_FILE = Path("_generated-metadata.yml")
+RESOURCES_OUTPUT = Path("_generated-resources.md")
+IMAGE_DIR = Path("resource-images")
+# Named after Skymaps.com's YYMM date code (see the Makefile's skymap target).
+SKYMAP_FILE = Path(os.environ.get("SKYMAP_FILE", f"skymap-{time.strftime('%y%m')}.pdf"))
+
+# Some park-district CDNs reject the bare urllib user agent.
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    )
+}
+
+
+def _slugify(name):
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or "image"
+
+
+def _fetch_image(resource):
+    """Download the resource image into IMAGE_DIR and return the markdown
+    embedding for it, or None if it cannot be retrieved.
+
+    The file is cached under a slug derived from the resource name; delete
+    resource-images/ (or `make clean`) to re-download a refreshed copy.
+    """
+    url = resource["image"]
+    suffix = Path(url.split("?")[0]).suffix.lower()
+    if suffix not in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+        suffix = ".png"
+    local = IMAGE_DIR / f"{_slugify(resource['name'])}{suffix}"
+    if not local.exists():
+        try:
+            request = urllib.request.Request(url, headers=_HEADERS)
+            with urllib.request.urlopen(request, timeout=30) as response:
+                local.write_bytes(response.read())
+        except OSError:
+            return None
+    caption = resource["name"]
+    if resource.get("url"):
+        caption = f"[{caption}]({resource['url']})"
+    return f"#### {caption}\n\n![{resource['name']}]({local}){{width=100%}}\n\n"
+
+
+def _skymap_block():
+    """Return markdown embedding this month's sky map PDF, or None if it has
+    not been fetched yet. The raw LaTeX include only takes effect for PDF
+    output, so the whole block is marked pdf-only."""
+    if not SKYMAP_FILE.exists():
+        return None
+    return (
+        '::: {.content-visible when-format="pdf"}\n'
+        "## Night Sky Map\n\n"
+        f"\\includepdf[fitpaper=true,pages=-]{{{SKYMAP_FILE}}}\n"
+        ":::\n\n"
+    )
 
 
 def main():
-    if not DATA_FILE.exists():
-        OUTPUT_FILE.write_text("")
-        return
     try:
         data = yaml.safe_load(DATA_FILE.read_text()) or {}
-    except yaml.YAMLError:
-        OUTPUT_FILE.write_text("")
-        return
+    except (OSError, yaml.YAMLError):
+        data = {}
+
     name = (data.get("trip") or {}).get("name", "")
     yaml.safe_dump(
         {"title": name, "website": {"title": name}},
@@ -32,6 +97,28 @@ def main():
         sort_keys=False,
     )
     print(f"Generated {OUTPUT_FILE} with title: {name}")
+
+    IMAGE_DIR.mkdir(exist_ok=True)
+    blocks = []
+    for stop in data.get("stops") or []:
+        for resource in stop.get("resources") or []:
+            if resource.get("image"):
+                block = _fetch_image(resource)
+                if block:
+                    blocks.append(block)
+
+    sections = []
+    if blocks:
+        sections.append("## Campground Maps\n\n" + "".join(blocks))
+    skymap = _skymap_block()
+    if skymap:
+        sections.append(skymap)
+    body = "".join(sections)
+    RESOURCES_OUTPUT.write_text(body, encoding="utf-8")
+    detail = f" with {len(blocks)} embedded image(s)"
+    if skymap:
+        detail += f" and the {SKYMAP_FILE.name} sky map"
+    print(f"Generated {RESOURCES_OUTPUT}{detail}")
 
 
 if __name__ == "__main__":

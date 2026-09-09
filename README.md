@@ -39,6 +39,7 @@ Run `make help` to list available commands. Common workflows:
 | `make preview` | Open live-reload preview in the browser           |
 | `make render`  | Render itinerary to static HTML in `_site/`       |
 | `make pdf`     | Render itinerary to PDF in `_site/`               |
+| `make skymap`  | Fetch this month's sky map from Skymaps.com (PDF) |
 | `make clean`   | Remove generated output                           |
 
 Or call the tools directly:
@@ -66,8 +67,24 @@ Or edit `itinerary.yml` directly. Each entry under `stops` follows this schema:
 | `accommodation`| string   | Hotel, Airbnb, etc.                              |
 | `transport`    | object   | `mode` (string) and `notes` (string)             |
 | `activities`   | list     | Bullet-point list of planned activities           |
+| `resources`    | list     | Optional links: `name`, `url`, and an optional `image` URL that is downloaded and embedded at the end of the document |
 | `lat`          | number   | Latitude for the map marker                      |
 | `lon`          | number   | Longitude for the map marker                     |
+
+Resources with an `image` URL are fetched into `resource-images/` by the
+pre-render script and appended as full-width pictures at the end of both the
+HTML and PDF output. Delete `resource-images/` (or `make clean`) to re-download
+a refreshed copy.
+
+`make skymap` downloads Skymaps.com's evening sky map for the current month to
+`skymap-YYMM.pdf`. When that file is present, the PDF build appends it as its
+own page in the resources section; HTML output ignores it. Deleting the file
+(`make clean`) drops it from the next build.
+
+An optional `zoom` value under `trip` sets the route-map zoom level: it caps
+how far in the auto-fitted PDF map can zoom (so a single-location trip like a
+campground still shows the approach roads) and sets the starting zoom of the
+interactive web map (default 9). Leave it out to auto-fit every stop.
 
 Add, remove, or reorder stops — the table and map update automatically on the next render.
 

@@ -1,7 +1,10 @@
 /.quarto/
 **/*.quarto_ipynb
-route-map.png
+/route-map.png
 /.envrc
 /_site/
 /_generated-metadata.yml
+/_generated-resources.md
+/resource-images/
+/skymap-*.pdf
 /trips/

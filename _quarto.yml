@@ -20,6 +20,9 @@ format:
     toc: true
   pdf:
     documentclass: article
+    include-in-header:
+      text: |
+        \usepackage{pdfpages}
     geometry:
       - top=1in
       - bottom=1in
