@@ -86,6 +86,31 @@ how far in the auto-fitted PDF map can zoom (so a single-location trip like a
 campground still shows the approach roads) and sets the starting zoom of the
 interactive web map (default 9). Leave it out to auto-fit every stop.
 
+## Calendar & Weather
+
+Each render adds a compact calendar and a short-range weather forecast so you
+can see the trip dates and the expected conditions at a glance. In the HTML
+output they sit near the end, just before the resources section.
+
+The **PDF output** is a condensed, document-style layout modeled on a printed
+Google Sheets trip agenda: each day is one row — a narrow date + weekday gutter
+column on the left and that day's details (transport, stay, activities, links)
+on the right — so days flow continuously across pages. The route map then
+shares the following page with the calendar and weather, and a running header
+with the trip name and a page-number footer are added to every page:
+
+- **Calendar** — every month the trip spans is drawn with the `cal` command
+  (falling back to `busybox cal`, then Python's stdlib `calendar` module) and
+  the itinerary dates are highlighted on it.
+- **Weather** — the first stop's coordinates are sent to the
+  [Open-Meteo](https://open-meteo.com/) forecast API (no key required) and a
+  per-day high/low + conditions table is emitted for the itinerary dates that
+  fall inside its 16-day forecast window. If the trip is further out than that,
+  or the render is offline, a short note is shown instead.
+
+Both sections read only the `date` and `lat`/`lon` fields already in the data
+file, so no extra configuration is needed.
+
 Add, remove, or reorder stops — the table and map update automatically on the next render.
 
 Nothing is hardcoded: the document title and site title are pulled from the

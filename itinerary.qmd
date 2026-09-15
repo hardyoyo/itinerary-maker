@@ -5,9 +5,20 @@ format: html
 ```{python}
 #| echo: false
 #| warning: false
+import json
 import os
 import yaml
 from pathlib import Path
+
+def _target_format():
+    """'html'/'pdf' for the current render, or None when unknown (then treat as HTML)."""
+    info_path = os.environ.get("QUARTO_EXECUTE_INFO")
+    if info_path:
+        try:
+            return json.load(open(info_path))["format"]["pandoc"]["to"]
+        except Exception:
+            return None
+    return None
 
 data = yaml.safe_load(Path(os.environ.get("ITINERARY_DATA", "itinerary.yml")).read_text())
 trip = data["trip"]
@@ -20,6 +31,7 @@ stops = data["stops"]
 #| echo: false
 #| warning: false
 from IPython.display import display, HTML
+import datetime as _dt
 import html as _html
 
 def _resources_html(s):
@@ -61,11 +73,60 @@ html_table = f"""
   <tbody>{rows}</tbody>
 </table>
 """
-display(HTML(html_table))
+
+# PDF: condense the table into the example's two-column "gutter agenda" —
+# a narrow date + weekday column on the left, the day's details on the right,
+# one row per stop so days flow naturally across pages.
+_agenda_rows = ""
+for s in stops:
+    try:
+        _dd = _dt.date.fromisoformat(str(s["date"]))
+        _gutter = (
+            f'<span style="font-size:18pt">{_dd.month}/{_dd.day}</span><br>'
+            f'<span style="font-size:10pt">{_dd.strftime("%a").upper()}</span>'
+        )
+    except (ValueError, TypeError):
+        _gutter = "<strong>" + "<br>".join(_html.escape(str(s["date"])).split("-")) + "</strong>"
+    _details = [
+        f'<span style="font-size:18pt">{_html.escape(str(s["location"]))}</span>'
+    ]
+    _transport = [str(s["transport"]["mode"])]
+    if s["transport"].get("notes"):
+        _transport.append(str(s["transport"]["notes"]))
+    _details.append(
+        "<strong>Transport</strong>:&nbsp;<em>" + _html.escape(" — ".join(_transport)) + "</em>"
+    )
+    _details.append("<strong>Stay</strong>:&nbsp;" + _html.escape(str(s["accommodation"])))
+    _details.extend(f"&nbsp;&nbsp;•&nbsp;{_html.escape(a)}" for a in s["activities"])
+    if s.get("resources"):
+        _details.append(_resources_html(s))
+    _agenda_rows += f"""
+    <tr>
+      <td class="agenda-gutter">{_gutter}</td>
+      <td class="agenda-details">{'<br>'.join(_details)}</td>
+    </tr>"""
+
+agenda_table = (
+    "<style>"
+    "  .agenda-table { width:100%; border-collapse:collapse; }"
+    "  .agenda-table td { padding:4px 8px; border-bottom:1px solid #e0e0e0; vertical-align:top; }"
+    "  .agenda-gutter { white-space:nowrap; font-weight:bold; color:#2c3e50; width:12%; text-align:center;"
+    "                   border-right:2px solid #2c3e50; font-size:1.05em; }"
+    "  .agenda-gutter strong { color:#2c3e50; }"
+    "  .agenda-details { font-size:0.92em; }"
+    "  .agenda-details a { color:#2c3e50; }"
+    "</style>"
+    '<table class="agenda-table">'
+    '<colgroup><col style="width:12%"><col style="width:88%"></colgroup>'
+    "<tbody>" + _agenda_rows + "</tbody></table>"
+)
+
+if _target_format() in (None, "html"):
+    display(HTML(html_table))
+else:
+    display(HTML(agenda_table))
 ```
-
----
-
+ 
 ## Route Map
 
 ```{python}
@@ -129,10 +190,6 @@ for i, s in list(enumerate(stops, 1))[::-1]:
 
 img.save(map_img, format="PNG")
 ```
-
-::: {.content-visible when-format="pdf"}
-![Route map with numbered stops](route-map.png){width=100%}
-:::
 
 ```{python}
 #| echo: false
@@ -215,7 +272,168 @@ else:
     _ = None
 ```
 
+::: {.content-visible when-format="html"}
 ---
+
+## Calendar & Forecast
+:::
+
+```{python}
+#| echo: false
+#| warning: false
+#| error: false
+#| output: asis
+import calendar as _cal_mod
+import json
+import os
+import re
+import shutil
+import subprocess
+from datetime import date
+from urllib.request import Request, urlopen
+
+def _target_format():
+    info_path = os.environ.get("QUARTO_EXECUTE_INFO")
+    if info_path:
+        try:
+            return json.load(open(info_path))["format"]["pandoc"]["to"]
+        except Exception:
+            return None
+    return None
+
+def _py_cal(year, month):
+    lines = [f"{_cal_mod.month_name[month]} {year}".center(20)]
+    lines.append("Su Mo Tu We Th Fr Sa")
+    for week in _cal_mod.Calendar(firstweekday=6).monthdayscalendar(year, month):
+        lines.append("".join(f"{d:>2} " if d else "   " for d in week).rstrip())
+    return "\n".join(lines)
+
+def _fetch_cal(year, month):
+    """`cal <month> <year>` text via cal/busybox/Python, ANSI codes stripped."""
+    exe = shutil.which("cal")
+    if not exe:
+        exe = shutil.which("busybox")
+    text = _py_cal(year, month) if not exe else ""
+    if exe and not text:
+        args = [exe] if "busybox" not in exe else [exe, "cal"]
+        try:
+            cp = subprocess.run(args + [str(month), str(year)],
+                                capture_output=True, text=True, timeout=10)
+            text = cp.stdout or _py_cal(year, month)
+        except (OSError, subprocess.SubprocessError):
+            text = _py_cal(year, month)
+    text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)
+    return [ln.rstrip() for ln in text.splitlines()]
+
+# Itinerary dates grouped by month: {(year, month): {day, ...}}
+trip_days = {}
+for s in stops:
+    try:
+        d = date.fromisoformat(s["date"])
+    except (ValueError, TypeError):
+        continue
+    trip_days.setdefault((d.year, d.month), set()).add(d.day)
+
+def _cal_grid(lines):
+    """Turn `cal` text rows into Sun-first week lists of day numbers."""
+    weeks = []
+    for ln in lines[2:]:
+        if not ln.strip():
+            continue
+        row = [""] * 7
+        for m in re.finditer(r"\d{1,2}", ln):
+            row[min(6, m.start() // 3)] = int(m.group(0))
+        weeks.append(row)
+    return weeks
+
+def _md_calendar(year, month, days, with_note=True, heading=False):
+    grid = _cal_grid(_fetch_cal(year, month))
+    if not grid:
+        return ""
+    rows = ["| Su | Mo | Tu | We | Th | Fr | Sa |",
+            "|:--:|:--:|:--:|:--:|:--:|:--:|:--:|"]
+    for week in grid:
+        cells = "| {} | {} | {} | {} | {} | {} | {} |".format(
+            *["**" + str(d) + "**" if d in days else (str(d) if d else "&nbsp;") for d in week]
+        )
+        rows.append(cells)
+    if heading:
+        header = f"### {_cal_mod.month_name[month]} {year}"
+    else:
+        header = f"**{_cal_mod.month_name[month]} {year}**"
+        if with_note:
+            header += " — itinerary dates in **bold**"
+    return header + "\n\n" + "\n".join(rows)
+
+calendar_md = ""
+for (year, month), days in sorted(trip_days.items()):
+    calendar_md += _md_calendar(year, month, days) + "\n\n"
+if not calendar_md:
+    calendar_md = "_No dated stops to highlight._\n\n"
+
+# PDF variant: same grids, but bare centered month headings (no note).
+calendar_pdf_md = ""
+for (year, month), days in sorted(trip_days.items()):
+    calendar_pdf_md += _md_calendar(year, month, days, heading=True) + "\n\n"
+
+# --- Weather ---
+weather_md = "_No stops with coordinates for a forecast._"
+if stops:
+    try:
+        lat, lon = stops[0]["lat"], stops[0]["lon"]
+        url = ("https://api.open-meteo.com/v1/forecast"
+               f"?latitude={lat}&longitude={lon}"
+               "&daily=weather_code,temperature_2m_max,temperature_2m_min"
+               "&timezone=auto&forecast_days=16")
+        req = Request(url, headers={"User-Agent": "itinerary-maker/1.0"})
+        with urlopen(req, timeout=20) as resp:
+            daily = json.load(resp)["daily"]
+        by_date = {d: (c, hi, lo) for d, c, hi, lo in zip(
+            daily["time"], daily["weather_code"],
+            daily["temperature_2m_max"], daily["temperature_2m_min"])}
+        _wmo = {
+            0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+            45: "Fog", 48: "Fog",
+            51: "Light drizzle", 53: "Drizzle", 55: "Drizzle",
+            56: "Freezing drizzle", 57: "Freezing drizzle",
+            61: "Light rain", 63: "Rain", 65: "Heavy rain",
+            66: "Freezing rain", 67: "Freezing rain",
+            71: "Light snow", 73: "Snow", 75: "Heavy snow", 77: "Snow grains",
+            80: "Light showers", 81: "Showers", 82: "Heavy showers",
+            85: "Snow showers", 86: "Snow showers",
+            95: "Thunderstorm", 96: "Thunderstorm w/ hail", 99: "Thunderstorm w/ hail",
+        }
+        rows = ""
+        for s in stops:
+            d = s["date"]
+            if d not in by_date:
+                continue
+            code, hi, lo = by_date[d]
+            rows += f"| {d} | {_wmo.get(code, 'Unknown')} | {hi:.0f}° / {lo:.0f}° |\n"
+        if rows:
+            weather_md = (
+                f"**Forecast for {stops[0]['location']}**\n\n"
+                "| Date | Conditions | High / Low |\n"
+                "|------|-------------|------------|\n" + rows
+            )
+        else:
+            weather_md = "*No forecast yet — Open-Meteo covers the next 16 days from today.*"
+    except Exception:
+        weather_md = "*Weather forecast unavailable (no network access at render time).*"
+
+_fmt = _target_format()
+_info = "### Calendar\n\n" + calendar_md + "### Weather\n\n" + weather_md
+if _fmt in (None, "html"):
+    print(_info)
+else:
+    # PDF: single column — full-width route map, then the calendar (bare
+    # month header only) and the forecast below it.
+    print("![Route map with numbered stops](route-map.png){width=100%}")
+    print("")
+    print(calendar_pdf_md.strip())
+    print("")
+    print("### Weather\n\n" + weather_md)
+```
 
 ```{python}
 #| echo: false

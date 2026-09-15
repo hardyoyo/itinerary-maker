@@ -21,13 +21,43 @@ format:
   pdf:
     documentclass: article
     include-in-header:
-      text: |
-        \usepackage{pdfpages}
+      - text: |
+          \usepackage{pdfpages}
+          \usepackage{etoolbox}
+          % Compact tables: smaller type, tighter columns and row spacing.
+          \AtBeginEnvironment{longtable}{\small}
+          \AtBeginEnvironment{tabular}{\small}
+          \setlength{\tabcolsep}{4pt}
+          \renewcommand{\arraystretch}{0.8}
+          % Pin figures (e.g. the route-map/calendar block) in place so their
+          % placement never floats away from where they're written.
+          \usepackage{float}
+          \makeatletter
+          \def\fps@figure{H}
+          \makeatother
+          % Center the PDF section headings (Route Map, March 2026, Weather).
+          \usepackage{sectsty}
+          \allsectionsfont{\centering}
+          % Trip title in Oswald; the rest of the document uses Source Code Pro.
+          \newfontfamily\quartotitlefont{Oswald}
+          \makeatletter
+          \def\@maketitle{%
+            \newpage
+            \null
+            \vskip 1em%
+            \resizebox{\textwidth}{!}{\mbox{\quartotitlefont\@title}}\par
+            \vskip 1em}%
+          \makeatother
+      - file: _generated-pdf-preamble.tex
     geometry:
-      - top=1in
-      - bottom=1in
-      - left=1in
-      - right=1in
+      - top=0.5in
+      - bottom=0.7in
+      - left=0.7in
+      - right=0.7in
     number-sections: false
-    fontsize: 11pt
-    mainfont: Lato
+    fontsize: 10pt
+    mainfont: Source Code Pro
+    filters:
+      - scripts/center-subtitle.lua
+      - scripts/fontsize-filter.lua
+      - scripts/agenda-lines.lua

@@ -31,7 +31,13 @@ render: ## Render itinerary to static HTML in _site/
 	quarto render itinerary.qmd
 
 pdf: ## Render itinerary to PDF in _site/
-	quarto render itinerary.qmd --to pdf
+	# Build into a temporary directory first, then move the finished PDF
+	# into place so the previous file stays readable/openable while
+	# rendering (Quarto wipes the output dir at the start of a build).
+	rm -rf /tmp/itinerary-pdf-build
+	quarto render itinerary.qmd --to pdf --output-dir /tmp/itinerary-pdf-build
+	install -m 644 /tmp/itinerary-pdf-build/itinerary.pdf _site/itinerary.pdf
+	@echo "PDF ready: _site/itinerary.pdf"
 
 skymap: ## Download this month's Skymaps.com evening sky map (PDF)
 	@test -f $(SKYMAP_FILE) || curl -fsSL $(SKYMAP_URL) -o $(SKYMAP_FILE)

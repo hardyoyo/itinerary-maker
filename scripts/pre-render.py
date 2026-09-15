@@ -27,6 +27,7 @@ import yaml
 DATA_FILE = Path(os.environ.get("ITINERARY_DATA", "itinerary.yml"))
 OUTPUT_FILE = Path("_generated-metadata.yml")
 RESOURCES_OUTPUT = Path("_generated-resources.md")
+PDF_PREAMBLE_FILE = Path("_generated-pdf-preamble.tex")
 IMAGE_DIR = Path("resource-images")
 # Named after Skymaps.com's YYMM date code (see the Makefile's skymap target).
 SKYMAP_FILE = Path(os.environ.get("SKYMAP_FILE", f"skymap-{time.strftime('%y%m')}.pdf"))
@@ -70,15 +71,44 @@ def _fetch_image(resource):
     return f"#### {caption}\n\n![{resource['name']}]({local}){{width=100%}}\n\n"
 
 
+def _latex_escape(text):
+    """Escape a string for safe use in LaTeX source (a document title)."""
+    return (
+        text.replace("\\", r"\textbackslash{}")
+        .replace("{", r"\{")
+        .replace("}", r"\}")
+        .replace("$", r"\$")
+        .replace("&", r"\&")
+        .replace("#", r"\#")
+        .replace("_", r"\_")
+        .replace("%", r"\%")
+        .replace("^", r"\textasciicircum{}")
+        .replace("~", r"\textasciitilde{}")
+    )
+
+
+def _pdf_preamble(title):
+    """LaTeX header-include for PDF output: a running page header with the trip
+    name and a centered page-number footer, matching the example layout."""
+    return (
+        "\\usepackage{fancyhdr}\n"
+        "\\pagestyle{fancy}\n"
+        "\\fancyhf{}\n"
+        f"\\fancyhead[C]{{\\small {_latex_escape(title)} \\strut}}\n"
+        "\\fancyfoot[C]{\\thepage}\n"
+        "\\renewcommand{\\headrulewidth}{0pt}\n"
+    )
+
+
 def _skymap_block():
     """Return markdown embedding this month's sky map PDF, or None if it has
     not been fetched yet. The raw LaTeX include only takes effect for PDF
-    output, so the whole block is marked pdf-only."""
+    output, so the whole block is marked pdf-only. No heading: the sky map
+    page carries its own title."""
     if not SKYMAP_FILE.exists():
         return None
     return (
         '::: {.content-visible when-format="pdf"}\n'
-        "## Night Sky Map\n\n"
         f"\\includepdf[fitpaper=true,pages=-]{{{SKYMAP_FILE}}}\n"
         ":::\n\n"
     )
@@ -97,6 +127,9 @@ def main():
         sort_keys=False,
     )
     print(f"Generated {OUTPUT_FILE} with title: {name}")
+
+    PDF_PREAMBLE_FILE.write_text(_pdf_preamble(name), encoding="utf-8")
+    print(f"Generated {PDF_PREAMBLE_FILE}")
 
     IMAGE_DIR.mkdir(exist_ok=True)
     blocks = []
