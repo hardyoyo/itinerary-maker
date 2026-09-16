@@ -16,6 +16,7 @@ Quarto project pre-render script. Reads the itinerary data file
   resources section of the rendered document.
 """
 
+import datetime
 import os
 import re
 import time
@@ -90,8 +91,15 @@ def _latex_escape(text):
 def _pdf_preamble(title):
     """LaTeX header-include for PDF output: a running page header with the trip
     name and a centered page-number footer, matching the example layout."""
+    circled = "\n".join(
+        f"\\newunicodechar{{{chr(0x2460 + n - 1)}}}"
+        f"{{\\fontspec{{DejaVu Sans}}{chr(0x2460 + n - 1)}}}"
+        for n in range(1, 21)
+    )
     return (
         "\\usepackage{fancyhdr}\n"
+        "\\usepackage{newunicodechar}\n"
+        f"{circled}\n"
         "\\pagestyle{fancy}\n"
         "\\fancyhf{}\n"
         f"\\fancyhead[C]{{\\small {_latex_escape(title)} \\strut}}\n"
@@ -100,12 +108,39 @@ def _pdf_preamble(title):
     )
 
 
-def _skymap_block():
-    """Return markdown embedding this month's sky map PDF, or None if it has
-    not been fetched yet. The raw LaTeX include only takes effect for PDF
-    output, so the whole block is marked pdf-only. No heading: the sky map
-    page carries its own title."""
+def _trip_skymap_months(data):
+    """Return the set of YYMM codes spanned by the trip's stop dates.
+
+    Skymaps.com dates its maps by month (yyMM), so the map only belongs in
+    the document when one of the trip's months matches. Trips with no dates
+    (or an unparseable one) yield an empty set, i.e. no sky map."""
+    months = set()
+    for stop in data.get("stops") or []:
+        date = (stop or {}).get("date")
+        if not date:
+            continue
+        try:
+            months.add(datetime.date.fromisoformat(date).strftime("%y%m"))
+        except ValueError:
+            continue
+    return months
+
+
+def _skymap_block(data):
+    """Return markdown embedding the fetched sky map PDF, or None if it has
+    not been fetched yet or its month does not fall inside the trip.
+
+    Filenames follow Skymaps.com's YYMM date code (`skymap-YYMM.pdf`); a file
+    whose name fits that pattern is included only when its month matches one
+    of the trip's months. A differently-named file (the SKYMAP_FILE override)
+    is assumed deliberate and always included. The raw LaTeX include only
+    takes effect for PDF output, so the whole block is marked pdf-only. No
+    heading: the sky map page carries its own title."""
     if not SKYMAP_FILE.exists():
+        return None
+    months = _trip_skymap_months(data)
+    match = re.fullmatch(r"skymap-(\d{4})\.pdf", SKYMAP_FILE.name)
+    if match and months and match.group(1) not in months:
         return None
     return (
         '::: {.content-visible when-format="pdf"}\n'
@@ -143,7 +178,7 @@ def main():
     sections = []
     if blocks:
         sections.append("## Campground Maps\n\n" + "".join(blocks))
-    skymap = _skymap_block()
+    skymap = _skymap_block(data)
     if skymap:
         sections.append(skymap)
     body = "".join(sections)

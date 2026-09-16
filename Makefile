@@ -2,8 +2,10 @@ DATA ?= itinerary.yml
 export ITINERARY_DATA := $(DATA)
 
 # Monthly evening sky map from Skymaps.com, named after its YYMM date code.
-SKYMAP_URL = https://www.skymaps.com/skymaps/tesmn$(shell date +%y%m).pdf
-SKYMAP_FILE = skymap-$(shell date +%y%m).pdf
+# Default to the current month; set MONTH=YYMM to fetch a trip's month instead.
+MONTH ?= $(shell date +%y%m)
+SKYMAP_URL = https://www.skymaps.com/skymaps/tesmn$(MONTH).pdf
+SKYMAP_FILE = skymap-$(MONTH).pdf
 
 .PHONY: help init install doctor preview render pdf skymap clean clean-cache
 
@@ -39,7 +41,7 @@ pdf: ## Render itinerary to PDF in _site/
 	install -m 644 /tmp/itinerary-pdf-build/itinerary.pdf _site/itinerary.pdf
 	@echo "PDF ready: _site/itinerary.pdf"
 
-skymap: ## Download this month's Skymaps.com evening sky map (PDF)
+skymap: ## Fetch a month's evening sky map (default: current; set MONTH=YYMM)
 	@test -f $(SKYMAP_FILE) || curl -fsSL $(SKYMAP_URL) -o $(SKYMAP_FILE)
 	@echo "Skymap: $(SKYMAP_FILE)"
 

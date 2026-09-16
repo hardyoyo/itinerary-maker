@@ -76,10 +76,14 @@ pre-render script and appended as full-width pictures at the end of both the
 HTML and PDF output. Delete `resource-images/` (or `make clean`) to re-download
 a refreshed copy.
 
-`make skymap` downloads Skymaps.com's evening sky map for the current month to
-`skymap-YYMM.pdf`. When that file is present, the PDF build appends it as its
-own page in the resources section; HTML output ignores it. Deleting the file
-(`make clean`) drops it from the next build.
+`make skymap` downloads Skymaps.com's evening sky map to `skymap-YYMM.pdf`,
+defaulting to the current month; set `MONTH=YYMM` (e.g. `MONTH=2611`) to fetch
+a specific trip month. When a sky map is present, the PDF build appends it as
+its own page in the resources section (HTML output ignores it), but only if its
+month falls inside the trip dates — the pre-render script matches the
+`skymap-YYMM.pdf` filename against the stops' months, so a stray map never
+lands in the document. Deleting the file (`make clean`) drops it from the next
+build.
 
 An optional `zoom` value under `trip` sets the route-map zoom level: it caps
 how far in the auto-fitted PDF map can zoom (so a single-location trip like a

@@ -30,27 +30,76 @@ stops = data["stops"]
 ```{python}
 #| echo: false
 #| warning: false
-from IPython.display import display, HTML
+from IPython.display import display, HTML, Markdown
 import datetime as _dt
 import html as _html
 
-def _resources_html(s):
+def _resources_html(s, with_url=False):
     items = []
     for r in s.get("resources", []):
         name = _html.escape(str(r["name"]))
         if r.get("url"):
-            items.append(f'<a href="{_html.escape(str(r["url"]))}" target="_blank">{name}</a>')
+            shown = f'<a href="{_html.escape(str(r["url"]))}" target="_blank">{name}</a>'
+            if with_url:
+                shown += f" ({_html.escape(str(r['url']))})"
+            items.append(shown)
         else:
             items.append(name)
     return "<br>".join(items)
 
+# Group stops by coordinates into "places". Each place gets one number (by
+# first appearance) that is reused across the agenda and the route map, so a
+# multi-day stay shows one marker/number instead of stacked dots.
+_loc_index = {}
+_loc_num_of = []
+loc_groups = []
+for _s in stops:
+    _key = (round(float(_s["lat"]), 4), round(float(_s["lon"]), 4))
+    _n = _loc_index.get(_key)
+    if _n is None:
+        _n = len(loc_groups) + 1
+        _loc_index[_key] = _n
+        loc_groups.append(
+            {"num": _n, "name": str(_s["location"]),
+             "lat": _s["lat"], "lon": _s["lon"], "stops": []}
+        )
+    loc_groups[_n - 1]["stops"].append(_s)
+    _loc_num_of.append(_n)
+
+def _days_label(_group_stops):
+    _days = []
+    for _s in _group_stops:
+        try:
+            _days.append(_dt.date.fromisoformat(str(_s["date"])).day)
+        except (ValueError, TypeError):
+            return "Multiple days"
+    if len(_days) == 1:
+        return f"Day: {_days[0]}"
+    _runs = []
+    for _d in sorted(_days):
+        if _runs and _d == _runs[-1][-1] + 1:
+            _runs[-1].append(_d)
+        else:
+            _runs.append([_d])
+    _parts = [f"{_r[0]}–{_r[-1]}" if len(_r) > 1 else str(_r[0]) for _r in _runs]
+    return "Days: " + " & ".join(_parts)
+
+for _g in loc_groups:
+    _g["day_text"] = _days_label(_g["stops"])
+
+# Numbered places are shown with circled-digit glyphs (1 → ❶ ① ... 20 → ⑳),
+# sized naturally along the location text like the map markers' own numbers.
+# 21+ falls back to plain digits.
+def _circled(_n):
+    return chr(0x2460 + _n - 1) if 1 <= _n <= 20 else str(_n)
+
 rows = ""
-for s in stops:
+for i, s in enumerate(stops, 1):
     activities = "<br>".join(f"• {a}" for a in s["activities"])
     rows += f"""
     <tr>
       <td><strong>{s['date']}</strong></td>
-      <td>{s['location']}</td>
+      <td>{s['location']}&nbsp;{_circled(_loc_num_of[i-1])}</td>
       <td>{s['accommodation']}</td>
       <td>{s['transport']['mode']}<br><em>{s['transport']['notes']}</em></td>
       <td>{activities}</td>
@@ -78,7 +127,7 @@ html_table = f"""
 # a narrow date + weekday column on the left, the day's details on the right,
 # one row per stop so days flow naturally across pages.
 _agenda_rows = ""
-for s in stops:
+for i, s in enumerate(stops, 1):
     try:
         _dd = _dt.date.fromisoformat(str(s["date"]))
         _gutter = (
@@ -88,7 +137,7 @@ for s in stops:
     except (ValueError, TypeError):
         _gutter = "<strong>" + "<br>".join(_html.escape(str(s["date"])).split("-")) + "</strong>"
     _details = [
-        f'<span style="font-size:18pt">{_html.escape(str(s["location"]))}</span>'
+        f'<span style="font-size:18pt">{_html.escape(str(s["location"]))}&nbsp;{_circled(_loc_num_of[i-1])}</span>'
     ]
     _transport = [str(s["transport"]["mode"])]
     if s["transport"].get("notes"):
@@ -99,7 +148,7 @@ for s in stops:
     _details.append("<strong>Stay</strong>:&nbsp;" + _html.escape(str(s["accommodation"])))
     _details.extend(f"&nbsp;&nbsp;•&nbsp;{_html.escape(a)}" for a in s["activities"])
     if s.get("resources"):
-        _details.append(_resources_html(s))
+        _details.append(_resources_html(s, with_url=True))
     _agenda_rows += f"""
     <tr>
       <td class="agenda-gutter">{_gutter}</td>
@@ -125,6 +174,20 @@ if _target_format() in (None, "html"):
     display(HTML(html_table))
 else:
     display(HTML(agenda_table))
+
+# Top-level `notes` are rendered as their own section right after the agenda
+# (open-ended reference material, e.g. a food cheat sheet), so they don't get
+# mistaken for one day's resources.
+_notes_md = ""
+for _n in (data or {}).get("notes") or []:
+    _title = (_n or {}).get("title", "")
+    _items = (_n or {}).get("items") or []
+    if not (_title or _items):
+        continue
+    _notes_md += f"## {_title}\n\n"
+    _notes_md += "".join(f"- {_i}\n" for _i in _items) + "\n"
+if _notes_md:
+    display(Markdown(_notes_md))
 ```
  
 ## Route Map
@@ -136,6 +199,7 @@ else:
 # Always generate a static snapshot of the route; used as the PDF image
 # (the HTML output gets an interactive Folium map instead).
 import math
+import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from staticmap import StaticMap, CircleMarker, Line
@@ -155,9 +219,10 @@ m = StaticMap(900, 560, padding_x=40, padding_y=40)
 coords = [[s["lon"], s["lat"]] for s in stops]
 m.add_line(Line(coords, "#000000", 1))
 
-for s in reversed(stops):
-    for color, r in (("#000000", 14),):
-        m.add_marker(CircleMarker((s["lon"], s["lat"]), color, r))
+# One marker per place (from the agenda cell's grouping), not per day, so a
+# multi-day stay reads as a single dot with a callout instead of stacked dots.
+for g in loc_groups:
+    m.add_marker(CircleMarker((g["lon"], g["lat"]), "#000000", 14))
 
 # Auto-fit to the tightest zoom that shows every stop. A trip-level `zoom`
 # acts as a ceiling on that, so a single-location trip (e.g. one campsite)
@@ -172,21 +237,86 @@ if trip_zoom is not None:
 else:
     img = m.render()
 
-# Draw the day number on each marker. Positions replicate staticmap's
-# own Web-Mercator projection so the labels land exactly on the markers.
+# Number each place marker and add a callout for multi-day stays. Positions
+# replicate staticmap's own Web-Mercator projection so labels land exactly.
 draw = ImageDraw.Draw(img)
-try:
-    font = ImageFont.truetype("OpenSans-Bold.ttf", 16)
-except OSError:
-    font = ImageFont.load_default()
+_font_paths = (
+    os.path.expanduser("~/.fonts/OpenSans-Bold.ttf"),
+    "OpenSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/open-sans/OpenSans-Bold.ttf",
+)
+def _load_bold(size):
+    for _p in _font_paths:
+        try:
+            return ImageFont.truetype(_p, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
-for i, s in list(enumerate(stops, 1))[::-1]:
-    px = m._x_to_px(_lon_to_x(s["lon"], m.zoom))
-    py = m._y_to_px(_lat_to_y(s["lat"], m.zoom))
-    tx = str(i)
-    bbox = draw.textbbox((0, 0), tx, font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text((px - tw / 2 - bbox[0], py - th / 2 - bbox[1]), tx, fill="white", font=font)
+font_num = _load_bold(16)
+font_name = _load_bold(12)
+font_days = _load_bold(10)
+
+def _marker_px(lon, lat):
+    return m._x_to_px(_lon_to_x(lon, m.zoom)), m._y_to_px(_lat_to_y(lat, m.zoom))
+
+def _overlaps(a, b):
+    return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
+
+def _truncate(text, width):
+    while text and draw.textlength(text, font=font_name) > width:
+        text = text[:-1]
+    return text
+
+_R, _GAP = 14, 10
+_PADX, _PADY, _LH = 7, 4, 15
+
+def _fit_callout(px, py, w, h, placed):
+    # Candidate offsets around the marker; first one that fits wins.
+    cand = (
+        (px + _R + _GAP, py - h / 2, (px + _R + _GAP, py)),
+        (px + _R + _GAP, py - _R - _GAP - h, (px + _R + _GAP, py - _R - _GAP)),
+        (px + _R + _GAP, py + _R + _GAP, (px + _R + _GAP, py + _R + _GAP)),
+        (px - _R - _GAP - w, py - h / 2, (px - _R - _GAP, py)),
+        (px - _R - _GAP - w, py - _R - _GAP - h, (px - _R - _GAP, py - _R - _GAP)),
+        (px - _R - _GAP - w, py + _R + _GAP, (px - _R - _GAP, py + _R + _GAP)),
+    )
+    for x0, y0, anchor in cand:
+        box = (x0, y0, x0 + w, y0 + h)
+        if x0 < 0 or y0 < 0 or x0 + w > img.width or y0 + h > img.height:
+            continue
+        if any(_overlaps(box, b) for b in placed):
+            continue
+        return box, anchor
+    return None, None
+
+placed_callouts = []
+for g in loc_groups:
+    px, py = _marker_px(g["lon"], g["lat"])
+    num = str(g["num"])
+    _bbox = draw.textbbox((0, 0), num, font=font_num)
+    _tw, _th = _bbox[2] - _bbox[0], _bbox[3] - _bbox[1]
+    draw.text((px - _tw / 2 - _bbox[0], py - _th / 2 - _bbox[1]),
+              num, fill="white", font=font_num)
+
+for g in loc_groups:
+    if len(g["stops"]) < 2:
+        continue
+    px, py = _marker_px(g["lon"], g["lat"])
+    name = _truncate(str(g["name"]), 280)
+    days = g.get("day_text") or "Multiple days"
+    w = int(max(draw.textlength(name, font=font_name),
+                draw.textlength(days, font=font_days))) + 2 * _PADX
+    h = 2 * _PADY + 2 * _LH
+    box, anchor = _fit_callout(px, py, w, h, placed_callouts)
+    if box is None:
+        continue
+    draw.line([(px, py), anchor], fill="#000000", width=1)
+    draw.rounded_rectangle(box, radius=4, fill="#ffffff", outline="#000000", width=1)
+    draw.text((box[0] + _PADX, box[1] + _PADY), name, fill="#000000", font=font_name)
+    draw.text((box[0] + _PADX, box[1] + _PADY + _LH), days, fill="#000000", font=font_days)
+    placed_callouts.append(box)
 
 img.save(map_img, format="PNG")
 ```
@@ -196,6 +326,7 @@ img.save(map_img, format="PNG")
 #| warning: false
 #| error: false
 from IPython.display import display as _display
+import html as _html
 import os
 import folium
 
@@ -222,32 +353,28 @@ folium.TileLayer(
     attr="&copy; OpenStreetMap contributors &copy; CARTO",
 ).add_to(m)
 
-def _numbered_marker(i, s):
-    popup_html = f"""
-    <b>Day {i} — {s['location']}</b><br>
-    {s['date']}<br>
-    <i>{s['accommodation']}</i>
-    """
+def _place_marker(g):
+    stays = "<br>".join(_html.escape(str(s["accommodation"])) for s in g["stops"])
+    popup_html = (
+        f"<b>Loc {g['num']} — {_html.escape(g['name'])}</b><br>"
+        f"{g.get('day_text', '')}<br><i>{stays}</i>"
+    )
     return folium.Marker(
-        location=[s["lat"], s["lon"]],
+        location=[g["lat"], g["lon"]],
         popup=popup_html,
-        tooltip=f"{s['location']}",
+        tooltip=f"{g['num']} · {g['name']}",
         icon=folium.DivIcon(
             html=f'<div style="background:#000;color:#fff;font-family:Open Sans,sans-serif;'
                  f'font-weight:bold;width:24px;height:24px;border-radius:50%;'
                  f'display:flex;align-items:center;justify-content:center;'
-                 f'font-size:14px;">{i}</div>',
+                 f'font-size:14px;">{g["num"]}</div>',
             icon_size=(24, 24),
             icon_anchor=(12, 12),
         ),
     )
 
-for i, s in enumerate(stops, 1):
-    _numbered_marker(i, s).add_to(m)
-
-# stops 1 and 7 share the same location; re-add marker 1 last so it wins the overlap
-if stops and stops[0]["lon"] == stops[-1]["lon"] and stops[0]["lat"] == stops[-1]["lat"]:
-    _numbered_marker(1, stops[0]).add_to(m)
+for g in loc_groups:
+    _place_marker(g).add_to(m)
 
 folium.PolyLine(
     [[s["lat"], s["lon"]] for s in stops],
@@ -428,7 +555,7 @@ if _fmt in (None, "html"):
 else:
     # PDF: single column — full-width route map, then the calendar (bare
     # month header only) and the forecast below it.
-    print("![Route map with numbered stops](route-map.png){width=100%}")
+    print("![Route map with numbered places](route-map.png){width=100%}")
     print("")
     print(calendar_pdf_md.strip())
     print("")
