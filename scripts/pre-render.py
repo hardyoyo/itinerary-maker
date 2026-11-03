@@ -89,8 +89,13 @@ def _latex_escape(text):
 
 
 def _pdf_preamble(title):
-    """LaTeX header-include for PDF output: a running page header with the trip
-    name and a centered page-number footer, matching the example layout."""
+    """LaTeX header-include for PDF output: a print-date/time, page-number, and
+    trip name footer, matching the example layout."""
+    now = datetime.datetime.now().astimezone()
+    printed = (
+        f"{now:%B} {now.day}, {now.year} at "
+        f"{now.strftime('%I:%M %p').lstrip('0').lower()} {now:%Z}"
+    )
     circled = "\n".join(
         f"\\newunicodechar{{{chr(0x2460 + n - 1)}}}"
         f"{{\\fontspec{{DejaVu Sans}}{chr(0x2460 + n - 1)}}}"
@@ -102,8 +107,9 @@ def _pdf_preamble(title):
         f"{circled}\n"
         "\\pagestyle{fancy}\n"
         "\\fancyhf{}\n"
-        f"\\fancyhead[C]{{\\small {_latex_escape(title)} \\strut}}\n"
+        f"\\fancyfoot[L]{{\\small Printed {printed} \\strut}}\n"
         "\\fancyfoot[C]{\\thepage}\n"
+        f"\\fancyfoot[R]{{\\small {_latex_escape(title)} \\strut}}\n"
         "\\renewcommand{\\headrulewidth}{0pt}\n"
     )
 

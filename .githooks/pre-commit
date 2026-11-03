@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Refuse to commit anything under trips/, including data files and generated
+# exports that may contain personal data (tickets, booking references, etc.).
+# The directory is also ignored in .gitignore; this catches force-added files
+# and copies of tracked files.
+set -euo pipefail
+
+blocked=0
+
+while IFS= read -r -d '' file; do
+  case "$file" in
+    trips/*)
+      printf 'pre-commit: refusing to commit trip data: %s\n' "$file" >&2
+      blocked=1
+      ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if (( blocked )); then
+  printf '%s\n' 'Remove it from the index (git rm --cached -- <file>); keep it in the ignored trips/ tree.' >&2
+  exit 1
+fi

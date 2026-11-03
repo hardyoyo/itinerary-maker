@@ -7,7 +7,7 @@ MONTH ?= $(shell date +%y%m)
 SKYMAP_URL = https://www.skymaps.com/skymaps/tesmn$(MONTH).pdf
 SKYMAP_FILE = skymap-$(MONTH).pdf
 
-.PHONY: help init install doctor preview render pdf skymap clean clean-cache
+.PHONY: help init install hooks doctor preview render pdf skymap clean clean-cache
 
 .DEFAULT_GOAL := help
 
@@ -20,6 +20,9 @@ init: ## Create or edit an itinerary data file (interactively)
 
 install: ## Install Python dependencies
 	pip install -r requirements.txt
+
+hooks: ## Enable the tracked Git pre-commit hook
+	git config core.hooksPath .githooks
 
 doctor: ## Verify Quarto installation (install, versions, info)
 	quarto check install

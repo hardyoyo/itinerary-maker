@@ -36,6 +36,7 @@ Run `make help` to list available commands. Common workflows:
 |----------------|---------------------------------------------------|
 | `make init`    | Create/edit the itinerary data file (interactively)|
 | `make install` | Install Python dependencies                       |
+| `make hooks`   | Enable the tracked Git pre-commit hook            |
 | `make preview` | Open live-reload preview in the browser           |
 | `make render`  | Render itinerary to static HTML in `_site/`       |
 | `make pdf`     | Render itinerary to PDF in `_site/`               |
@@ -48,6 +49,11 @@ Or call the tools directly:
 quarto preview itinerary.qmd   # live preview
 quarto render itinerary.qmd    # static output in _site/
 ```
+
+Run `make hooks` once per clone to enable the tracked `.githooks/pre-commit`
+hook. It rejects every staged file under `trips/` — data, PDF, and HTML alike —
+so itineraries containing ticket or booking details cannot be committed even
+if force-added. The hook can still be bypassed with `git commit --no-verify`.
 
 ## Customising the Trip
 
@@ -70,6 +76,14 @@ Or edit `itinerary.yml` directly. Each entry under `stops` follows this schema:
 | `resources`    | list     | Optional links: `name`, `url`, and an optional `image` URL that is downloaded and embedded at the end of the document |
 | `lat`          | number   | Latitude for the map marker                      |
 | `lon`          | number   | Longitude for the map marker                     |
+
+Optional top-level keys keep trip-specific extras out of the template:
+
+| Key          | Type   | Description                                              |
+|--------------|--------|----------------------------------------------------------|
+| `overview`   | string | Curated markdown summary rendered under "Trip overview"  |
+| `gaps`       | string | Path to a plain-text open-items file, rendered in the PDF (resolved relative to the data file) |
+| `trip.temperature_unit` | string | `fahrenheit` (default) or `celsius` for the forecast |
 
 Resources with an `image` URL are fetched into `resource-images/` by the
 pre-render script and appended as full-width pictures at the end of both the
@@ -100,8 +114,8 @@ The **PDF output** is a condensed, document-style layout modeled on a printed
 Google Sheets trip agenda: each day is one row — a narrow date + weekday gutter
 column on the left and that day's details (transport, stay, activities, links)
 on the right — so days flow continuously across pages. The route map then
-shares the following page with the calendar and weather, and a running header
-with the trip name and a page-number footer are added to every page:
+shares the following page with the calendar and weather. A footer is added to
+every page showing the print date/time, page number, and trip name:
 
 - **Calendar** — every month the trip spans is drawn with the `cal` command
   (falling back to `busybox cal`, then Python's stdlib `calendar` module) and

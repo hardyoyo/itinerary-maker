@@ -20,7 +20,8 @@ def _target_format():
             return None
     return None
 
-data = yaml.safe_load(Path(os.environ.get("ITINERARY_DATA", "itinerary.yml")).read_text())
+data_path = Path(os.environ.get("ITINERARY_DATA", "itinerary.yml"))
+data = yaml.safe_load(data_path.read_text())
 trip = data["trip"]
 stops = data["stops"]
 ```
@@ -67,22 +68,31 @@ for _s in stops:
     _loc_num_of.append(_n)
 
 def _days_label(_group_stops):
-    _days = []
+    _dates = []
     for _s in _group_stops:
         try:
-            _days.append(_dt.date.fromisoformat(str(_s["date"])).day)
+            _dates.append(_dt.date.fromisoformat(str(_s["date"])))
         except (ValueError, TypeError):
             return "Multiple days"
-    if len(_days) == 1:
-        return f"Day: {_days[0]}"
+    if len(_dates) == 1:
+        return f"Day: {_dates[0].day}"
     _runs = []
-    for _d in sorted(_days):
-        if _runs and _d == _runs[-1][-1] + 1:
+    for _d in sorted(_dates):
+        if _runs and _d == _runs[-1][-1] + _dt.timedelta(days=1):
             _runs[-1].append(_d)
         else:
             _runs.append([_d])
-    _parts = [f"{_r[0]}–{_r[-1]}" if len(_r) > 1 else str(_r[0]) for _r in _runs]
-    return "Days: " + " & ".join(_parts)
+    _same_month = len({(_d.year, _d.month) for _d in _dates}) == 1
+    _parts = []
+    for _r in _runs:
+        if len(_r) == 1:
+            _parts.append(str(_r[0].day))
+        elif _r[0].month == _r[-1].month:
+            _parts.append(f"{_r[0].day}–{_r[-1].day}")
+        else:
+            _parts.append(f"{_r[0].day}–{_r[-1].strftime('%b.')} {_r[-1].day}")
+    _prefix = _runs[0][0].strftime("%b. ") if _same_month else ""
+    return _prefix + " & ".join(_parts)
 
 for _g in loc_groups:
     _g["day_text"] = _days_label(_g["stops"])
@@ -508,9 +518,13 @@ weather_md = "_No stops with coordinates for a forecast._"
 if stops:
     try:
         lat, lon = stops[0]["lat"], stops[0]["lon"]
+        _temp_unit = trip.get("temperature_unit", "fahrenheit")
+        if _temp_unit not in ("fahrenheit", "celsius"):
+            _temp_unit = "fahrenheit"
         url = ("https://api.open-meteo.com/v1/forecast"
                f"?latitude={lat}&longitude={lon}"
                "&daily=weather_code,temperature_2m_max,temperature_2m_min"
+               f"&temperature_unit={_temp_unit}"
                "&timezone=auto&forecast_days=16")
         req = Request(url, headers={"User-Agent": "itinerary-maker/1.0"})
         with urlopen(req, timeout=20) as resp:
@@ -553,13 +567,8 @@ _info = "### Calendar\n\n" + calendar_md + "### Weather\n\n" + weather_md
 if _fmt in (None, "html"):
     print(_info)
 else:
-    # PDF: single column — full-width route map, then the calendar (bare
-    # month header only) and the forecast below it.
+    # PDF: full-width route map; calendar/weather moved to the very end.
     print("![Route map with numbered places](route-map.png){width=100%}")
-    print("")
-    print(calendar_pdf_md.strip())
-    print("")
-    print("### Weather\n\n" + weather_md)
 ```
 
 ```{python}
@@ -577,4 +586,83 @@ _resources_md = (
     _resources_path.read_text(encoding="utf-8") if _resources_path.exists() else ""
 )
 Markdown(_resources_md)
+```
+
+```{python}
+#| echo: false
+#| warning: false
+#| output: asis
+from IPython.display import Markdown as _Markdown
+
+# Open reservations, read from the data file's top-level `booking` key.
+_booking = (data or {}).get("booking") or {}
+_booking_items = _booking.get("items") or []
+if _booking_items:
+    _booking_title = _booking.get("title") or "Still need to book"
+    _booking_md = f"## {_booking_title}\n\n" + "".join(
+        f"- {_item}\n" for _item in _booking_items
+    )
+    display(_Markdown(_booking_md))
+
+# Trip overview — an optional curated summary from the data file, kept
+# separate from the per-stop agenda above.
+_overview = str((data or {}).get("overview") or "").strip()
+if _overview:
+    display(_Markdown("## Trip overview\n\n" + _overview))
+```
+
+```{python}
+#| echo: false
+#| warning: false
+#| output: asis
+_fmt = _target_format()
+if _fmt not in (None, "html"):
+    print("\\newpage\n\n## Calendar & Weather\n\n" + calendar_pdf_md.strip())
+    print("")
+    print("### Weather\n\n" + weather_md)
+```
+
+```{python}
+#| echo: false
+#| warning: false
+#| output: asis
+from IPython.display import Markdown as _GapsMarkdown
+from pathlib import Path
+import json
+import os
+import textwrap
+
+def _gaps_target_format():
+    info_path = os.environ.get("QUARTO_EXECUTE_INFO")
+    if info_path:
+        try:
+            return json.load(open(info_path))["format"]["pandoc"]["to"]
+        except Exception:
+            return None
+    return None
+
+_gaps_format = _gaps_target_format()
+_gaps_ref = str((data or {}).get("gaps") or "").strip()
+if _gaps_format is not None and _gaps_format != "html" and _gaps_ref:
+    _gaps_path = Path(_gaps_ref)
+    if not _gaps_path.is_absolute() and not _gaps_path.exists():
+        _gaps_path = data_path.parent / _gaps_path
+    if _gaps_path.exists():
+        _gaps_lines = []
+        for _line in _gaps_path.read_text(encoding="utf-8").splitlines():
+            if not _line.strip():
+                _gaps_lines.append("")
+                continue
+            _gaps_lines.extend(
+                textwrap.wrap(
+                    _line,
+                    width=80,
+                    replace_whitespace=False,
+                    drop_whitespace=True,
+                    break_long_words=True,
+                    break_on_hyphens=False,
+                ) or [""]
+            )
+        _gaps_text = "\n".join(_gaps_lines).strip()
+        display(_GapsMarkdown("## Gaps & open items\n\n```\n" + _gaps_text + "\n```\n"))
 ```
