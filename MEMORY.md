@@ -104,13 +104,17 @@ layout now is and the gotchas hit along the way.
 - `make pdf` builds into `/tmp/itinerary-pdf-build` via `--output-dir` then
   `install`s into `_site/` — the old PDF stays openable/readable during the
   render. Mind the alternative: Quarto wipes the output dir at build start.
-- **The user only ever runs `make pdf`.** NEVER run `make pdf` and `make render`
-  concurrently, nor two renders at once: they race over the shared
-  `itinerary.quarto_ipynb` and corrupt the Quarto cache, which silently makes the
-  PDF render the wide HTML `.itinerary-table` instead of the gutter agenda (it
-  reproduced exactly this way). If the agenda ever loses its `Transport:`/`Stay:`
-  rows, `make clean-cache` then re-render sequentially. After any change, A
-  single `make pdf DATA=trips/<trip>.yml` is the deliverable; treat `make render`
+- **The user only ever runs `make pdf`.** Concurrent renders race over the
+  shared `itinerary.quarto_ipynb` and cross-contaminate format output: the PDF
+  can silently render the wide HTML `.itinerary-table` instead of the gutter
+  agenda, and an HTML render can even receive the agenda table (reproduced by
+  running `make render` and `make pdf` together). `render` and `pdf` now take
+  an `flock` on `.quarto/render.lock` so they serialize; do not bypass that by
+  calling `quarto render` directly alongside a Make target, and stop any
+  `quarto preview` session before `make pdf`. If output still looks wrong,
+  `make clean-cache` (now also removes `.quarto/_freeze` and `*.quarto_ipynb`)
+  then render again. After any change, a single
+  `make pdf DATA=trips/<trip>.yml` is the deliverable; treat `make render`
   as optional and only when the HTML is explicitly wanted.
 - Split-stops are normal files (committed); `skymap-*.pdf`, `_site/`,
   `_generated-*`, `_generated-pdf-preamble.tex`, `resource-images/`, `trips/`,
