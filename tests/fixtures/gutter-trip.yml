@@ -1,0 +1,46 @@
+trip:
+  name: "Gutter Agenda Test Trip"
+  description: "Small fixture used to verify the PDF gutter-agenda layout."
+  temperature_unit: fahrenheit
+
+overview: |
+  **Alpha (2/10, 1 night)** — The first stop.
+
+  **Beta (2/11–2/12, 2 nights)** — The second stop.
+
+gaps: gutter-gaps.txt
+
+stops:
+  - date: "2027-02-10"
+    location: "Alpha"
+    accommodation: "Cabin A"
+    transport:
+      mode: "Drive"
+      notes: "Short drive from the airport."
+    activities:
+      - "Settle in"
+      - "Walk the shore"
+    lat: 40.0
+    lon: -88.0
+
+  - date: "2027-02-11"
+    location: "Beta"
+    accommodation: "Cabin B"
+    transport:
+      mode: "Ferry"
+      notes: "Morning crossing."
+    activities:
+      - "Hike the ridge"
+    lat: 40.1
+    lon: -88.1
+
+  - date: "2027-02-12"
+    location: "Beta"
+    accommodation: "Cabin B"
+    transport:
+      mode: "On foot"
+      notes: "Stay local."
+    activities:
+      - "Beach day"
+    lat: 40.1
+    lon: -88.1

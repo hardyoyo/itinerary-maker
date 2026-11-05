@@ -40,6 +40,7 @@ Run `make help` to list available commands. Common workflows:
 | `make preview` | Open live-reload preview in the browser           |
 | `make render`  | Render itinerary to static HTML in `_site/`       |
 | `make pdf`     | Render itinerary to PDF in `_site/`               |
+| `make test`    | Render a fixture and verify the PDF gutter agenda |
 | `make skymap`  | Fetch this month's sky map from Skymaps.com (PDF) |
 | `make clean`   | Remove generated output                           |
 
@@ -49,6 +50,16 @@ Or call the tools directly:
 quarto preview itinerary.qmd   # live preview
 quarto render itinerary.qmd    # static output in _site/
 ```
+
+`make render` and `make pdf` clear Quarto's execution cache before each build
+and refuse to run while a live preview is active, so switching trips or formats
+cannot reuse another render's cached cell output. Stop any running preview
+first; call `make clean-cache` directly if you only want to drop the cache.
+
+`make test` renders `tests/fixtures/gutter-trip.yml` to a temporary PDF and
+checks the extracted text for the gutter layout (M/D dates, weekday lines, no
+wide-table `Accommodation` column) plus the map/overview/calendar/gaps sections.
+It requires `pdftotext` from poppler-utils and network access for map tiles.
 
 Run `make hooks` once per clone to enable the tracked `.githooks/pre-commit`
 hook. It rejects every staged file under `trips/` — data, PDF, and HTML alike —
@@ -92,12 +103,11 @@ a refreshed copy.
 
 `make skymap` downloads Skymaps.com's evening sky map to `skymap-YYMM.pdf`,
 defaulting to the current month; set `MONTH=YYMM` (e.g. `MONTH=2611`) to fetch
-a specific trip month. When a sky map is present, the PDF build appends it as
-its own page in the resources section (HTML output ignores it), but only if its
-month falls inside the trip dates — the pre-render script matches the
-`skymap-YYMM.pdf` filename against the stops' months, so a stray map never
-lands in the document. Deleting the file (`make clean`) drops it from the next
-build.
+a specific trip month. The PDF build auto-discovers every `skymap-*.pdf` in the
+project and appends each one whose month falls inside the trip as its own page
+in the resources section (HTML output ignores them) — so you don't need to pass
+`MONTH` to both commands. A stray map from an unrelated month is skipped.
+Deleting the file(s) (`make clean`) drops them from the next build.
 
 An optional `zoom` value under `trip` sets the route-map zoom level: it caps
 how far in the auto-fitted PDF map can zoom (so a single-location trip like a

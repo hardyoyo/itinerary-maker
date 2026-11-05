@@ -12,7 +12,19 @@ SKYMAP_FILE = skymap-$(MONTH).pdf
 # the render targets rather than trusting everyone to run them one at a time.
 RENDER_LOCK = .quarto/render.lock
 
-.PHONY: help init install hooks doctor preview render pdf skymap clean clean-cache
+# Quarto keys its execution cache to itinerary.qmd, not to ITINERARY_DATA or
+# the output format. Switching trips or formats (or rendering while a preview
+# is open) can therefore reuse the other format's cached cells and swap the
+# PDF's gutter agenda for the wide HTML table. Clear it before every render.
+CACHE_PATHS = .quarto/project-cache .quarto/_freeze
+CLEAR_CACHE = rm -rf $(CACHE_PATHS) && rm -f *.quarto_ipynb
+PREVIEW_RUNNING = pgrep -f '[q]uarto preview' >/dev/null
+
+# Overridable so the layout test can render somewhere other than _site.
+PDF_BUILD_DIR ?= /tmp/itinerary-pdf-build
+PDF_OUT ?= _site/itinerary.pdf
+
+.PHONY: help init install hooks doctor preview render pdf test skymap clean clean-cache
 
 .DEFAULT_GOAL := help
 
@@ -39,18 +51,36 @@ preview: ## Open live-reload preview in browser
 
 render: ## Render itinerary to static HTML in _site/
 	@mkdir -p .quarto
-	flock $(RENDER_LOCK) quarto render itinerary.qmd
+	@if $(PREVIEW_RUNNING); then \
+		echo "error: stop the live preview before rendering — it races over the shared notebook" >&2; \
+		exit 1; \
+	fi
+	flock $(RENDER_LOCK) sh -c '\
+		$(CLEAR_CACHE) && \
+		quarto render itinerary.qmd'
 
 pdf: ## Render itinerary to PDF in _site/
 	# Build into a temporary directory first, then move the finished PDF
 	# into place so the previous file stays readable/openable while
 	# rendering (Quarto wipes the output dir at the start of a build).
-	@mkdir -p .quarto
+	@mkdir -p .quarto $(dir $(PDF_OUT))
+	@if $(PREVIEW_RUNNING); then \
+		echo "error: stop the live preview before rendering — it races over the shared notebook" >&2; \
+		exit 1; \
+	fi
 	flock $(RENDER_LOCK) sh -c '\
-		rm -rf /tmp/itinerary-pdf-build && \
-		quarto render itinerary.qmd --to pdf --output-dir /tmp/itinerary-pdf-build && \
-		install -m 644 /tmp/itinerary-pdf-build/itinerary.pdf _site/itinerary.pdf'
-	@echo "PDF ready: _site/itinerary.pdf"
+		$(CLEAR_CACHE) && \
+		rm -rf $(PDF_BUILD_DIR) && \
+		quarto render itinerary.qmd --to pdf --output-dir $(PDF_BUILD_DIR) && \
+		install -m 644 $(PDF_BUILD_DIR)/itinerary.pdf $(PDF_OUT)'
+	@echo "PDF ready: $(PDF_OUT)"
+
+test: ## Verify the PDF renders in the gutter-agenda layout
+	@$(MAKE) --no-print-directory pdf \
+		DATA=tests/fixtures/gutter-trip.yml \
+		PDF_BUILD_DIR=/tmp/itinerary-test-build \
+		PDF_OUT=/tmp/itinerary-test.pdf
+	python scripts/check_pdf_layout.py tests/fixtures/gutter-trip.yml /tmp/itinerary-test.pdf
 
 skymap: ## Fetch a month's evening sky map (default: current; set MONTH=YYMM)
 	@test -f $(SKYMAP_FILE) || curl -fsSL $(SKYMAP_URL) -o $(SKYMAP_FILE)
@@ -61,5 +91,4 @@ clean: clean-cache ## Remove generated output and the Quarto project cache
 	rm -f skymap-*.pdf
 
 clean-cache: ## Remove the Quarto project cache
-	rm -rf .quarto/project-cache .quarto/_freeze
-	rm -f *.quarto_ipynb
+	$(CLEAR_CACHE)

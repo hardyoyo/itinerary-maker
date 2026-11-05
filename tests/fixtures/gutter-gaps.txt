@@ -1,0 +1,4 @@
+Gutter agenda test trip — open items
+
+1. Confirm the fixture renders with the condensed agenda.
+- This text only needs to appear under the Gaps & open items section.

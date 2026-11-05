@@ -109,16 +109,24 @@ layout now is and the gotchas hit along the way.
   can silently render the wide HTML `.itinerary-table` instead of the gutter
   agenda, and an HTML render can even receive the agenda table (reproduced by
   running `make render` and `make pdf` together). `render` and `pdf` now take
-  an `flock` on `.quarto/render.lock` so they serialize; do not bypass that by
-  calling `quarto render` directly alongside a Make target, and stop any
-  `quarto preview` session before `make pdf`. If output still looks wrong,
-  `make clean-cache` (now also removes `.quarto/_freeze` and `*.quarto_ipynb`)
-  then render again. After any change, a single
-  `make pdf DATA=trips/<trip>.yml` is the deliverable; treat `make render`
-  as optional and only when the HTML is explicitly wanted.
+  an `flock` on `.quarto/render.lock` so they serialize. They also **clear the
+  execution cache first** (`CLEAR_CACHE` in the Makefile removes
+  `.quarto/project-cache`, `.quarto/_freeze`, and `*.quarto_ipynb` inside the
+  lock) and **refuse to run while a live preview is active** — Quarto keys its
+  freeze cache to `itinerary.qmd`, not to `ITINERARY_DATA` or the output
+  format, so switching trips/formats or a running preview could otherwise thaw
+  the wrong layout. `make clean-cache` remains available manually. Do not
+  bypass any of this by calling `quarto render` directly alongside a Make
+  target. After any change, a single `make pdf DATA=trips/<trip>.yml` is the
+  deliverable; treat `make render` as optional and only when the HTML is
+  explicitly wanted.
 - Split-stops are normal files (committed); `skymap-*.pdf`, `_site/`,
   `_generated-*`, `_generated-pdf-preamble.tex`, `resource-images/`, `trips/`,
   `.quarto/` are gitignored.
+- PDF builds **auto-discover** every `skymap-*.pdf` in the project and include
+  each whose `YYMM` matches a month in the trip's stops (chronological order), so
+  `make skymap MONTH=YYMM` and `make pdf` don't need the same MONTH. Non-matching
+  maps are skipped; `SKYMAP_FILE` (env) still forces one specific file.
 - `_generated-pdf-preamble.tex` is written by `scripts/pre-render.py` with the
   data file's trip name (LaTeX-escaped) for the `fancyhdr` running header; it is
   included via `include-in-header` in `_quarto.yml`.
@@ -159,6 +167,13 @@ layout now is and the gotchas hit along the way.
    sit on page 1.
 
 ## Test commands (verified to reproduce)
+- Gutter-layout regression test: `make test` renders `tests/fixtures/gutter-trip.yml`
+  to `/tmp/itinerary-test.pdf` (never clobbers `_site/`) and runs
+  `scripts/check_pdf_layout.py`. It asserts M/D + weekday gutter lines, the
+  absence of the wide table's `Accommodation` column, and the map/overview/
+  calendar/gaps sections. Needs `pdftotext` (poppler-utils) and map-tile network.
+  It catches the stale-cache failure: with the wide HTML table the check reports
+  the missing gutter lines and the `Accommodation` column.
 - Render + count pages: `make pdf` then `pdfinfo _site/itinerary.pdf | grep Pages`.
 - Secondary data: `ITINERARY_DATA=trips/camping-september-2026.yml quarto render itinerary.qmd --to pdf`.
 - HTML unchanged: `quarto render itinerary.qmd` and re-check the `.itinerary-table`.

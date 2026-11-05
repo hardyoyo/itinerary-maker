@@ -11,15 +11,13 @@ Quarto project pre-render script. Reads the itinerary data file
   a live network connection at render time.
 * _generated-resources.md — markdown that embeds those images; the document
   emits it from a code cell so it is appended at the end in both HTML and PDF.
-  If this month's sky map has been fetched (e.g. `make skymap`), a page
-  embedding that PDF is appended to the same file so it lands in the
-  resources section of the rendered document.
+  Every fetched sky map whose month falls inside the trip (`skymap-YYMM.pdf`,
+  e.g. from `make skymap`) is appended as its own PDF page.
 """
 
 import datetime
 import os
 import re
-import time
 import urllib.request
 from pathlib import Path
 
@@ -30,8 +28,8 @@ OUTPUT_FILE = Path("_generated-metadata.yml")
 RESOURCES_OUTPUT = Path("_generated-resources.md")
 PDF_PREAMBLE_FILE = Path("_generated-pdf-preamble.tex")
 IMAGE_DIR = Path("resource-images")
-# Named after Skymaps.com's YYMM date code (see the Makefile's skymap target).
-SKYMAP_FILE = Path(os.environ.get("SKYMAP_FILE", f"skymap-{time.strftime('%y%m')}.pdf"))
+# Sky maps are named after Skymaps.com's YYMM date code (see `make skymap`).
+SKYMAP_GLOB = "skymap-*.pdf"
 
 # Some park-district CDNs reject the bare urllib user agent.
 _HEADERS = {
@@ -132,25 +130,39 @@ def _trip_skymap_months(data):
     return months
 
 
-def _skymap_block(data):
-    """Return markdown embedding the fetched sky map PDF, or None if it has
-    not been fetched yet or its month does not fall inside the trip.
+def _skymap_files(data):
+    """Return the fetched sky map PDFs that belong in this trip.
 
-    Filenames follow Skymaps.com's YYMM date code (`skymap-YYMM.pdf`); a file
-    whose name fits that pattern is included only when its month matches one
-    of the trip's months. A differently-named file (the SKYMAP_FILE override)
-    is assumed deliberate and always included. The raw LaTeX include only
-    takes effect for PDF output, so the whole block is marked pdf-only. No
-    heading: the sky map page carries its own title."""
-    if not SKYMAP_FILE.exists():
-        return None
+    Filenames follow Skymaps.com's YYMM date code (`skymap-YYMM.pdf`); every
+    matching file is included when its month is one of the trip's months, so
+    `make skymap MONTH=YYMM` works without also passing MONTH to `make pdf`.
+    A file named by the SKYMAP_FILE environment variable is assumed deliberate
+    and always included. Sorted by filename, i.e. chronologically.
+    """
+    override = os.environ.get("SKYMAP_FILE")
+    if override:
+        candidates = [Path(override)]
+    else:
+        candidates = sorted(Path(".").glob(SKYMAP_GLOB))
     months = _trip_skymap_months(data)
-    match = re.fullmatch(r"skymap-(\d{4})\.pdf", SKYMAP_FILE.name)
-    if match and months and match.group(1) not in months:
-        return None
+    selected = []
+    for path in candidates:
+        if not path.exists():
+            continue
+        match = re.fullmatch(r"skymap-(\d{4})\.pdf", path.name)
+        if match and months and match.group(1) not in months:
+            continue
+        selected.append(path)
+    return selected
+
+
+def _skymap_block(path):
+    """Return markdown embedding one sky map PDF. The raw LaTeX include only
+    takes effect for PDF output, so the block is marked pdf-only. No heading:
+    the sky map page carries its own title."""
     return (
         '::: {.content-visible when-format="pdf"}\n'
-        f"\\includepdf[fitpaper=true,pages=-]{{{SKYMAP_FILE}}}\n"
+        f"\\includepdf[fitpaper=true,pages=-]{{{path}}}\n"
         ":::\n\n"
     )
 
@@ -184,14 +196,15 @@ def main():
     sections = []
     if blocks:
         sections.append("## Campground Maps\n\n" + "".join(blocks))
-    skymap = _skymap_block(data)
-    if skymap:
-        sections.append(skymap)
+    skymap_files = _skymap_files(data)
+    if skymap_files:
+        sections.extend(_skymap_block(path) for path in skymap_files)
     body = "".join(sections)
     RESOURCES_OUTPUT.write_text(body, encoding="utf-8")
     detail = f" with {len(blocks)} embedded image(s)"
-    if skymap:
-        detail += f" and the {SKYMAP_FILE.name} sky map"
+    if skymap_files:
+        names = ", ".join(path.name for path in skymap_files)
+        detail += f" and the {names} sky map(s)"
     print(f"Generated {RESOURCES_OUTPUT}{detail}")
 
 
