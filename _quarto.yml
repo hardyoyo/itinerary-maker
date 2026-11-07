@@ -18,6 +18,11 @@ format:
       - cosmo
       - variables.scss
     toc: true
+  epub:
+    toc: true
+    toc-depth: 2
+    number-sections: false
+    css: epub.css
   pdf:
     documentclass: article
     include-in-header:

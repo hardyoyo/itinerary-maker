@@ -1,0 +1,26 @@
+.agenda-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.agenda-table td {
+  padding: 0.25em 0.5em;
+  border-bottom: 1px solid #e0e0e0;
+  vertical-align: top;
+}
+
+.agenda-gutter {
+  white-space: nowrap;
+  font-weight: bold;
+  color: #2c3e50;
+  text-align: center;
+  border-right: 2px solid #2c3e50;
+}
+
+.agenda-gutter strong {
+  color: #2c3e50;
+}
+
+.agenda-details a {
+  color: #2c3e50;
+}

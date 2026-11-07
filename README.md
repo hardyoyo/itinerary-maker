@@ -8,6 +8,7 @@ A Quarto project that generates a styled, multi-page travel itinerary from a YAM
 itinerary-maker/
 ├── Makefile           # Init / install / preview / render / clean
 ├── _quarto.yml        # Quarto website configuration
+├── epub.css           # Reflowable EPUB styling for the gutter agenda
 ├── itinerary.yml      # Trip data (stops, dates, activities, coordinates)
 ├── itinerary.qmd      # Document that renders the itinerary and map
 ├── requirements.txt   # Python dependencies
@@ -40,6 +41,7 @@ Run `make help` to list available commands. Common workflows:
 | `make preview` | Open live-reload preview in the browser           |
 | `make render`  | Render itinerary to static HTML in `_site/`       |
 | `make pdf`     | Render itinerary to PDF in `_site/`               |
+| `make epub`    | Render itinerary to EPUB in `_site/`              |
 | `make test`    | Render a fixture and verify the PDF gutter agenda |
 | `make skymap`  | Fetch this month's sky map from Skymaps.com (PDF) |
 | `make clean`   | Remove generated output                           |
@@ -55,6 +57,14 @@ quarto render itinerary.qmd    # static output in _site/
 and refuse to run while a live preview is active, so switching trips or formats
 cannot reuse another render's cached cell output. Stop any running preview
 first; call `make clean-cache` directly if you only want to drop the cache.
+
+`make epub DATA=trips/<trip>.yml` renders the same itinerary to
+`_site/itinerary.epub` through Quarto's Pandoc EPUB writer, so it keeps the PDF's
+two-column gutter agenda (with relative font sizes so it reflows on e-readers).
+The route map, resource images, overview, booking items, gaps, calendar, and
+weather all carry over; sky maps are PDF-only and stay out of the EPUB. Use
+`EPUB_OUT=...` to write somewhere other than `_site/` (for example to keep
+multiple trips side by side).
 
 `make test` renders `tests/fixtures/gutter-trip.yml` to a temporary PDF and
 checks the extracted text for the gutter layout (M/D dates, weekday lines, no
@@ -94,6 +104,7 @@ Optional top-level keys keep trip-specific extras out of the template:
 |--------------|--------|----------------------------------------------------------|
 | `overview`   | string | Curated markdown summary rendered under "Trip overview"  |
 | `gaps`       | string | Path to a plain-text open-items file, rendered in the PDF (resolved relative to the data file) |
+| `skymap`     | bool   | Set `false` to leave the night sky map out of the PDF (default `true`) |
 | `trip.temperature_unit` | string | `fahrenheit` (default) or `celsius` for the forecast |
 
 Resources with an `image` URL are fetched into `resource-images/` by the
@@ -107,7 +118,8 @@ a specific trip month. The PDF build auto-discovers every `skymap-*.pdf` in the
 project and appends each one whose month falls inside the trip as its own page
 in the resources section (HTML output ignores them) — so you don't need to pass
 `MONTH` to both commands. A stray map from an unrelated month is skipped.
-Deleting the file(s) (`make clean`) drops them from the next build.
+Set `skymap: false` in the data file to omit the sky map even when a matching
+file exists. Deleting the file(s) (`make clean`) drops them from the next build.
 
 An optional `zoom` value under `trip` sets the route-map zoom level: it caps
 how far in the auto-fitted PDF map can zoom (so a single-location trip like a

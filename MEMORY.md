@@ -9,7 +9,8 @@ layout now is and the gotchas hit along the way.
 
 ## Current verified state (clean, both formats working)
 - `quarto render itinerary.qmd` → HTML; `quarto render itinerary.qmd --to pdf` → PDF.
-- `make render` (HTML), `make pdf` (PDF), `make skymap`, `make init`, `make clean`.
+- `make render` (HTML), `make pdf` (PDF), `make epub` (EPUB), `make skymap`,
+  `make init`, `make clean`.
 - **PDF page layout right now (PR trip, 7 stops):**
   - Page 1: title + description + **condensed 2-column "gutter agenda"**. Each
     stop is one row: narrow left column = date (`3/14`) + weekday (`SAT`), wide
@@ -24,6 +25,23 @@ layout now is and the gotchas hit along the way.
     page-number footer on every page, like the Nova Scotia example.
 - **HTML:** unchanged — full-width `.itinerary-table` (6 columns), interactive
   Folium map under "Route Map", Calendar & Forecast section near the end.
+
+## EPUB output
+- `make epub DATA=trips/<trip>.yml` → `_site/itinerary.epub` via
+  `quarto render itinerary.qmd --to epub`, same lock/cache/preview guards as
+  PDF. Builds in `/tmp/itinerary-epub-build`, then installs (`EPUB_OUT`).
+- `_target_format()` returns `"epub"`; EPUB reuses the PDF gutter agenda table
+  (not the wide HTML table). It uses relative `em` sizes (`1.5em` date,
+  `0.8em` weekday, `1.35em` location, 15% gutter) instead of the PDF's fixed
+  `18pt`/`10pt`, styled by `epub.css`.
+- EPUB is in the non-HTML branch: static route map, resources, overview,
+  booking, gaps, and calendar/weather are included. `\newpage` is PDF-only.
+- The HTML "Calendar & Forecast" heading is
+  `when-format="html" unless-format="epub"` because Quarto treats EPUB as an
+  HTML format; otherwise it leaked an empty heading into the EPUB.
+- Sky maps stay PDF-only (`.content-visible when-format="pdf"`).
+- EPUB resource links are hyperlinks only; raw URLs are suppressed there
+  (`with_url=not _epub`).
 
 ## Cross-session decisions that MUST stay
 - Agenda layout matches `NovaScotiaTrip2024.pdf`: gutter date+weekday column on
@@ -126,7 +144,8 @@ layout now is and the gotchas hit along the way.
 - PDF builds **auto-discover** every `skymap-*.pdf` in the project and include
   each whose `YYMM` matches a month in the trip's stops (chronological order), so
   `make skymap MONTH=YYMM` and `make pdf` don't need the same MONTH. Non-matching
-  maps are skipped; `SKYMAP_FILE` (env) still forces one specific file.
+  maps are skipped; `SKYMAP_FILE` (env) still forces one specific file. A
+  top-level `skymap: false` in the data file opts the trip out entirely.
 - `_generated-pdf-preamble.tex` is written by `scripts/pre-render.py` with the
   data file's trip name (LaTeX-escaped) for the `fancyhdr` running header; it is
   included via `include-in-header` in `_quarto.yml`.

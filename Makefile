@@ -24,7 +24,10 @@ PREVIEW_RUNNING = pgrep -f '[q]uarto preview' >/dev/null
 PDF_BUILD_DIR ?= /tmp/itinerary-pdf-build
 PDF_OUT ?= _site/itinerary.pdf
 
-.PHONY: help init install hooks doctor preview render pdf test skymap clean clean-cache
+EPUB_BUILD_DIR ?= /tmp/itinerary-epub-build
+EPUB_OUT ?= _site/itinerary.epub
+
+.PHONY: help init install hooks doctor preview render pdf epub test skymap clean clean-cache
 
 .DEFAULT_GOAL := help
 
@@ -74,6 +77,19 @@ pdf: ## Render itinerary to PDF in _site/
 		quarto render itinerary.qmd --to pdf --output-dir $(PDF_BUILD_DIR) && \
 		install -m 644 $(PDF_BUILD_DIR)/itinerary.pdf $(PDF_OUT)'
 	@echo "PDF ready: $(PDF_OUT)"
+
+epub: ## Render itinerary to EPUB (Pandoc) in _site/
+	@mkdir -p .quarto $(dir $(EPUB_OUT))
+	@if $(PREVIEW_RUNNING); then \
+		echo "error: stop the live preview before rendering — it races over the shared notebook" >&2; \
+		exit 1; \
+	fi
+	flock $(RENDER_LOCK) sh -c '\
+		$(CLEAR_CACHE) && \
+		rm -rf $(EPUB_BUILD_DIR) && \
+		quarto render itinerary.qmd --to epub --output-dir $(EPUB_BUILD_DIR) && \
+		install -m 644 $(EPUB_BUILD_DIR)/itinerary.epub $(EPUB_OUT)'
+	@echo "EPUB ready: $(EPUB_OUT)"
 
 test: ## Verify the PDF renders in the gutter-agenda layout
 	@$(MAKE) --no-print-directory pdf \

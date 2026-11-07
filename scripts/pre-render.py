@@ -12,7 +12,8 @@ Quarto project pre-render script. Reads the itinerary data file
 * _generated-resources.md — markdown that embeds those images; the document
   emits it from a code cell so it is appended at the end in both HTML and PDF.
   Every fetched sky map whose month falls inside the trip (`skymap-YYMM.pdf`,
-  e.g. from `make skymap`) is appended as its own PDF page.
+  e.g. from `make skymap`) is appended as its own PDF page, unless the data
+  file sets the top-level `skymap` key to false.
 """
 
 import datetime
@@ -130,6 +131,18 @@ def _trip_skymap_months(data):
     return months
 
 
+def _skymap_enabled(data):
+    """Whether this itinerary wants a night sky map.
+
+    The top-level `skymap` key can opt out (`skymap: false`); leaving it out
+    keeps the historical behaviour of including any matching map.
+    """
+    value = data.get("skymap", True)
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "false", "no", "off", "0")
+    return bool(value)
+
+
 def _skymap_files(data):
     """Return the fetched sky map PDFs that belong in this trip.
 
@@ -137,8 +150,11 @@ def _skymap_files(data):
     matching file is included when its month is one of the trip's months, so
     `make skymap MONTH=YYMM` works without also passing MONTH to `make pdf`.
     A file named by the SKYMAP_FILE environment variable is assumed deliberate
-    and always included. Sorted by filename, i.e. chronologically.
+    and always included. Sorted by filename, i.e. chronologically. A data file
+    with `skymap: false` disables the sky map entirely.
     """
+    if not _skymap_enabled(data):
+        return []
     override = os.environ.get("SKYMAP_FILE")
     if override:
         candidates = [Path(override)]
